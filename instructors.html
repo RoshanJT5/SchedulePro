@@ -1,0 +1,178 @@
+<div class="max-w-7xl mx-auto">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-secondary-900">Instructors</h1>
+            <p class="mt-1 text-secondary-500">Manage faculty and staff profiles and assignments.</p>
+        </div>
+        <button
+            class="flex items-center justify-center gap-2 h-10 px-5 bg-[#2563eb] text-white rounded-md text-sm font-semibold shadow-sm hover:bg-[#1d4ed8] transition-colors">
+            <span class="material-symbols-outlined text-base">add</span>
+            <span>Add Instructor</span>
+        </button>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-4 mb-8">
+        <div class="relative flex-1">
+            <span
+                class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-secondary-400">search</span>
+            <input
+                class="w-full h-12 pl-12 pr-4 rounded-md border border-secondary-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="Search by instructor name or department..." type="text" />
+        </div>
+        <select
+            class="h-12 w-full sm:w-48 rounded-md border-secondary-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option>Filter by Dept.</option>
+            <option>Mathematics</option>
+            <option>Physics</option>
+            <option>Chemistry</option>
+            <option>Biology</option>
+        </select>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 pt-12">
+
+        <div
+            class="bg-white border border-secondary-200 rounded-lg shadow-sm text-center p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+            <img alt="Dr. Eleanor Vance"
+                class="w-24 h-24 rounded-full mx-auto -mt-16 border-4 border-white object-cover"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCH6qJDSMphDfcZ8TdnNHuSBNn1Iyna49YKdP--kWNpPvFtcDuYzaUDbdDNx2EK3u1WM5RegF0-xmxAMS8Dlwo3p8WDINnlec1IFIqB-mLpaWtQaEzVR1XGwQYn9IiAUYsY4CvEownXW_NNFnwkSSFGd4ow0ivPi2mI0YtcRKeQHHKw56Fwdjb51m1dveSiMf9LSN6MQyvK5XFoX3hqTaB2cKtINBiKPSn-0_X06-Ok9ZlYKNB9NilnUFLMXrNjEn6ZGD9AdZYgwrg" />
+            <div class="mt-4">
+                <h3 class="text-lg font-bold text-secondary-900">Dr. Eleanor Vance</h3>
+                <p class="text-sm font-medium text-primary-600">Mathematics Dept.</p>
+            </div>
+            <div class="mt-4 text-sm text-secondary-500 border-t border-secondary-100 pt-4 space-y-2">
+                <p class="flex items-center justify-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">email</span><span>e.vance@example.edu</span>
+                </p>
+                <p class="flex items-center justify-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">badge</span><span>3 Courses
+                        Assigned</span></p>
+            </div>
+            <div class="mt-6">
+                <a href="#" data-instructor-id="eleanor-vance"
+                    class="view-profile-btn w-full inline-block bg-primary-50 text-primary-700 font-semibold py-2 px-4 rounded-md hover:bg-primary-100 transition-colors text-sm">View
+                    Profile</a>
+            </div>
+        </div>
+
+        <div
+            class="bg-white border border-secondary-200 rounded-lg shadow-sm text-center p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+            <img alt="Dr. Samuel Reed" class="w-24 h-24 rounded-full mx-auto -mt-16 border-4 border-white object-cover"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLUBAuh9N7keG6T6cQ1rj7NTi9QC1J-pW-zzca-yvFzqkhqkTg1_EPe1f0xnEIAFdWcBY3kSGfkL3PGrTn5B8mRYpuTMFqw9nsAszxx8eTNfnhly4x4iNmMthJb2r4m5zrO7vnUKbYuFdaKgwjjIGTgOceKSSwm6xofP6GllytqocOMeXa_aAWziA2aIGvxsmcdQi7EOP-gcVNuWwQdcjgUT_rfoZbe5q5EkDUPnW1L7vcWvqvEQuD-9qDU59IkwOn6dMClvBu68I" />
+            <div class="mt-4">
+                <h3 class="text-lg font-bold text-secondary-900">Dr. Samuel Reed</h3>
+                <p class="text-sm font-medium text-primary-600">Physics Dept.</p>
+            </div>
+            <div class="mt-4 text-sm text-secondary-500 border-t border-secondary-100 pt-4 space-y-2">
+                <p class="flex items-center justify-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">email</span><span>s.reed@example.edu</span>
+                </p>
+                <p class="flex items-center justify-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">badge</span><span>2 Courses
+                        Assigned</span></p>
+            </div>
+            <div class="mt-6">
+                <a href="#" data-instructor-id="samuel-reed"
+                    class="view-profile-btn w-full inline-block bg-primary-50 text-primary-700 font-semibold py-2 px-4 rounded-md hover:bg-primary-100 transition-colors text-sm">View
+                    Profile</a>
+            </div>
+        </div>
+
+        <div
+            class="bg-white border border-secondary-200 rounded-lg shadow-sm text-center p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+            <img alt="Dr. Olivia Bennett"
+                class="w-24 h-24 rounded-full mx-auto -mt-16 border-4 border-white object-cover"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3g89ByGvD7t5W1Jtgbg_C_tmvssc5JeXAOBO7QEQ2qp9x_0uOkSz6ViP-k-CRmFDUsknF2WrFSP14g2q-X5UWVjkr3NOoyw1BGCRanlzJOnpvR0RYUCyhmq0MSlsD64QENwDy0M5D6yUYAByJgjgtUtXgauj6LyRyLTw_jovYUvARUdmFW7EVlhUP-N97U33aYBu61I5-npfBrFJax-Ozv3ATC7YsdZftWO4zAGw2-qVv3bCYiKdTk_trET-dtRjLs7FZW8SpXI0" />
+            <div class="mt-4">
+                <h3 class="text-lg font-bold text-secondary-900">Dr. Olivia Bennett</h3>
+                <p class="text-sm font-medium text-primary-600">Chemistry Dept.</p>
+            </div>
+            <div class="mt-4 text-sm text-secondary-500 border-t border-secondary-100 pt-4 space-y-2">
+                <p class="flex items-center justify-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">email</span><span>o.bennett@example.edu</span>
+                </p>
+                <p class="flex items-center justify-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">badge</span><span>4 Courses
+                        Assigned</span></p>
+            </div>
+            <div class="mt-6">
+                <a href="#" data-instructor-id="olivia-bennett"
+                    class="view-profile-btn w-full inline-block bg-primary-50 text-primary-700 font-semibold py-2 px-4 rounded-md hover:bg-primary-100 transition-colors text-sm">View
+                    Profile</a>
+            </div>
+        </div>
+
+        <div
+            class="bg-white border border-secondary-200 rounded-lg shadow-sm text-center p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+            <img alt="Dr. Ethan Carter" class="w-24 h-24 rounded-full mx-auto -mt-16 border-4 border-white object-cover"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCprC3K-q2U0Up7ijK1sNrUXT3502MZH7vIrwRxYJ3qIfmrNEmCltCR3dcjdXgWR7v2Yln7NcfazqTrWF24sC_MP-1Sx7lFiSh4QSpHVh6CsIxERu3_vNaS-7ItqtTpkdYy4Jt6U9b3zG4FPHcUtz5WeVx9vxWccqaXDpsGQ82lxtIfrZEqi5H7_d4KBIcX9GCh-hkivrqQuLmERVESjNRX6QMoJ3zXrkrxdibgDADuJvzjGxr7GhdvQ2WcZJUyvYD8-RJzfE3saXQ" />
+            <div class="mt-4">
+                <h3 class="text-lg font-bold text-secondary-900">Dr. Ethan Carter</h3>
+                <p class="text-sm font-medium text-primary-600">Biology Dept.</p>
+            </div>
+            <div class="mt-4 text-sm text-secondary-500 border-t border-secondary-100 pt-4 space-y-2">
+                <p class="flex items-center justify-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">email</span><span>e.carter@example.edu</span>
+                </p>
+                <p class="flex items-center justify-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">badge</span><span>3 Courses
+                        Assigned</span></p>
+            </div>
+            <div class="mt-6">
+                <a href="#" data-instructor-id="ethan-carter"
+                    class="view-profile-btn w-full inline-block bg-primary-50 text-primary-700 font-semibold py-2 px-4 rounded-md hover:bg-primary-100 transition-colors text-sm">View
+                    Profile</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="instructor-modal"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div class="flex items-start justify-between p-6 border-b">
+            <div class="flex items-center gap-4">
+                <img id="modal-img" alt="Instructor"
+                    class="w-16 h-16 rounded-full object-cover border-2 border-primary-100" src="" />
+                <div>
+                    <h2 id="modal-name" class="text-2xl font-bold text-secondary-900"></h2>
+                    <p id="modal-department" class="text-base font-medium text-primary-600"></p>
+                </div>
+            </div>
+            <button id="modal-close-btn" class="p-2 text-secondary-400 hover:text-secondary-600">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div class="p-6">
+            <h3 class="text-lg font-semibold text-secondary-900 mb-4">Contact Information</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-6">
+                <p class="flex items-center gap-3"><span
+                        class="material-symbols-outlined text-secondary-400">email</span><span id="modal-email"></span>
+                </p>
+                <p class="flex items-center gap-3"><span
+                        class="material-symbols-outlined text-secondary-400">phone</span><span id="modal-phone"></span>
+                </p>
+                <p class="flex items-center gap-3 col-span-full"><span
+                        class="material-symbols-outlined text-secondary-400">location_on</span><span
+                        id="modal-office"></span></p>
+            </div>
+            <h3 class="text-lg font-semibold text-secondary-900 mb-4">Assigned Courses</h3>
+            <div class="overflow-x-auto rounded-lg border">
+                <table class="w-full">
+                    <thead class="bg-secondary-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-secondary-500 uppercase">Course Code
+                            </th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-secondary-500 uppercase">Course
+                                Title</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-secondary-500 uppercase">Credits
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="modal-courses-table" class="divide-y">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

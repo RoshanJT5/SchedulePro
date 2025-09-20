@@ -1,0 +1,214 @@
+<div class="max-w-7xl mx-auto">
+    <div class="flex flex-col gap-4 mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h2 class="text-gray-900 text-3xl font-bold leading-tight tracking-tight">Generated
+                    Timetable</h2>
+                <p class="text-gray-500 text-base font-normal leading-normal mt-1">Your weekly schedule
+                    is ready.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button
+                    class="flex items-center justify-center h-10 px-4 rounded-md bg-white border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-100">
+                    <span class="material-symbols-outlined mr-2 text-lg">
+                        share
+                    </span>
+                    Share
+                </button>
+                <div class="relative">
+                    <button
+                        class="flex items-center justify-center h-10 px-4 rounded-md bg-white border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-100 peer">
+                        <span class="material-symbols-outlined mr-2 text-lg">
+                            download
+                        </span>
+                        Download Timetable
+                    </button>
+                    <div
+                        class="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-10 hidden peer-focus:block hover:block">
+                        <a class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" href="#">Download as PDF</a>
+                        <a class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" href="#">Download as CSV</a>
+                        <a class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" href="#">Download as PNG</a>
+                    </div>
+                </div>
+                <button
+                    class="flex items-center justify-center h-10 px-4 rounded-md bg-[#137fec] text-white text-sm font-medium hover:opacity-90">
+                    <span class="material-symbols-outlined mr-2 text-lg">
+                        edit
+                    </span>
+                    Edit
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="w-full overflow-x-auto rounded-lg border border-secondary-200 bg-white shadow-sm">
+        <table class="w-full table-fixed">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="w-40 px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        Time</th>
+                    <th class="w-1/5 px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        Monday</th>
+                    <th class="w-1/5 px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        Tuesday</th>
+                    <th class="w-1/5 px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        Wednesday</th>
+                    <th class="w-1/5 px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        Thursday</th>
+                    <th class="w-1/5 px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        Friday</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                <tr class="h-20">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">9:00 -
+                        9:40</td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-blue-100 text-blue-800">Math</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-green-100 text-green-800">Science</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-yellow-100 text-yellow-800">History</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-blue-100 text-blue-800">Math</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-green-100 text-green-800">Science</div>
+                    </td>
+                </tr>
+                <tr class="h-20">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">9:40 -
+                        10:20</td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-red-100 text-red-800">English</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-blue-100 text-blue-800">Math</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-green-100 text-green-800">Science</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-red-100 text-red-800">English</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-blue-100 text-blue-800">Math</div>
+                    </td>
+                </tr>
+                <tr class="h-20">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">10:20 -
+                        11:00</td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-purple-100 text-purple-800">Art</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-red-100 text-red-800">English</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-blue-100 text-blue-800">Math</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-green-100 text-green-800">Science</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-red-100 text-red-800">English</div>
+                    </td>
+                </tr>
+                <tr class="h-20 bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">11:00 -
+                        11:20</td>
+                    <td class="p-2" colspan="5">
+                        <div class="timetable-cell bg-gray-200 text-gray-600 font-medium">Short Break
+                        </div>
+                    </td>
+                </tr>
+                <tr class="h-20">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">11:20 -
+                        12:00</td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-indigo-100 text-indigo-800">Physics</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-yellow-100 text-yellow-800">History</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-purple-100 text-purple-800">Art</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-indigo-100 text-indigo-800">Physics</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-yellow-100 text-yellow-800">History</div>
+                    </td>
+                </tr>
+                <tr class="h-20">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">12:00 -
+                        12:40</td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-green-100 text-green-800">Biology Lab</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-indigo-100 text-indigo-800">Physics</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-yellow-100 text-yellow-800">Geography</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-teal-100 text-teal-800">Physical Ed.</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-pink-100 text-pink-800">Music</div>
+                    </td>
+                </tr>
+                <tr class="h-20 bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">12:40 -
+                        13:40</td>
+                    <td class="p-2" colspan="5">
+                        <div class="timetable-cell bg-gray-200 text-gray-600 font-medium">Lunch Break
+                        </div>
+                    </td>
+                </tr>
+                <tr class="h-20">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">13:40 -
+                        14:20</td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-gray-100 text-gray-500">Free Period</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-pink-100 text-pink-800">Music</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-gray-100 text-gray-500">Free Period</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-green-100 text-green-800">Biology Lab</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-gray-100 text-gray-500">Free Period</div>
+                    </td>
+                </tr>
+                <tr class="h-20">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">14:20 -
+                        15:00</td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-teal-100 text-teal-800">Physical Ed.</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-gray-100 text-gray-500">Free Period</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-yellow-100 text-yellow-800">Geography</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-gray-100 text-gray-500">Free Period</div>
+                    </td>
+                    <td class="p-2">
+                        <div class="timetable-cell bg-teal-100 text-teal-800">Physical Ed.</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>

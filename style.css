@@ -1,0 +1,36 @@
+/* --- General Styles & Color Variables --- */
+:root {
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --secondary-50: #f8fafc;
+  --secondary-100: #f1f5f9;
+  --secondary-200: #e2e8f0;
+  --secondary-500: #64748b;
+  --secondary-700: #334155;
+  --secondary-900: #0f172a;
+}
+body {
+  font-family: "Inter", sans-serif;
+}
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* --- Component-Specific Styles --- */
+.nav-link.active {
+  background-color: var(--primary-600);
+  color: var(--primary-50);
+  font-weight: 600;
+}
+.timetable-cell {
+  padding: 1rem;
+  text-align: center;
+  border-radius: 0.375rem;
+  font-weight: 500;
+}
+
+/* The .remove-arrows helper style is no longer needed and has been removed. */
