@@ -3,8 +3,8 @@
 
 const API_BASE = '/v1';
 const TOKEN_KEY = 'plansphere_token';
-const GROK_API_KEY = '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';
-const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
+// SECURITY: API keys should NEVER be in frontend code
+// Grok API calls are now handled by backend endpoint: /v1/generate-timetable-ai
 
 // State Management
 let branches = [];
@@ -227,49 +227,38 @@ async function loadInstructorsForSubjects() {
 }
 
 async function generateScheduleWithAI() {
-    // Prepare data for Grok AI
+    // Prepare data for AI generation
     const prompt = buildPromptForGrok();
     
     try {
-        const response = await fetch(GROK_API_URL, {
+        // Call our BACKEND endpoint (which securely calls Grok API)
+        const response = await fetch(`${API_BASE}/generate-timetable-ai`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${GROK_API_KEY}`
-            },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
-                model: 'grok-beta',
-                messages: [
-                    {
-                        role: 'system',
-                        content: 'You are an expert timetable scheduler. Generate an optimal weekly timetable avoiding conflicts and balancing workload. Return ONLY valid JSON, no markdown or explanations.'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                temperature: 0.7,
-                max_tokens: 2000
+                prompt: prompt,
+                subjects: availableSubjects,
+                instructors: availableInstructors,
+                classrooms: availableClassrooms
             })
         });
         
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Grok API Error:', errorText);
-            throw new Error('Grok API request failed');
+            console.error('Backend AI API Error:', errorText);
+            throw new Error('AI generation request failed');
         }
         
         const data = await response.json();
-        const aiResponse = data.choices[0].message.content;
+        const aiResponse = data.ai_response || data.content;
         
-        console.log('Grok AI Response:', aiResponse);
+        console.log('AI Response received from backend:', aiResponse);
         
         // Parse AI response and build timetable
         timetableData = parseAIResponse(aiResponse);
         
     } catch (error) {
-        console.error('Error calling Grok AI:', error);
+        console.error('Error calling AI generation:', error);
         console.log('Falling back to rule-based algorithm...');
         // Fallback to rule-based generation
         timetableData = generateScheduleRuleBased();

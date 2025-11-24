@@ -6,9 +6,10 @@ Complete AI-powered timetable generation system for PlanSphere using Grok AI API
 ## Features Implemented
 
 ### 1. **AI Integration (Grok API)**
-- **API Key**: Integrated your Grok API key
+- **Secure Architecture**: API key stored in backend environment variables (.env)
+- **Backend Endpoint**: `/v1/generate-timetable-ai` handles all AI requests
 - **Model**: Using `grok-beta` for intelligent scheduling
-- **Fallback**: Rule-based algorithm if AI fails
+- **Fallback**: Rule-based algorithm if AI is not configured or fails
 - **Smart Prompting**: Sends subjects, instructors, classrooms, and constraints to AI
 
 ### 2. **Data Integration**
@@ -199,17 +200,25 @@ If Grok API fails, uses this logic:
 
 ## Technical Details
 
-### API Integration
+### API Integration (Secure Backend)
 ```javascript
-fetch('https://api.x.ai/v1/chat/completions', {
+// Frontend calls secure backend endpoint
+fetch('/v1/generate-timetable-ai', {
+  method: 'POST',
   headers: {
-    'Authorization': 'Bearer sk-or-v1-...'
+    'Authorization': 'Bearer {user_token}',
+    'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    model: 'grok-beta',
-    messages: [...]
+    prompt: '...',
+    subjects: [...],
+    instructors: [...],
+    classrooms: [...]
   })
 })
+
+// Backend (routes.py) handles Grok API securely
+// API key stored in .env file, never exposed to frontend
 ```
 
 ### Response Parsing
@@ -254,8 +263,9 @@ handleDrop() {
 
 ## Notes
 
-- **Grok API**: Uses your provided key, costs apply per request
-- **Fallback**: If API fails, uses rule-based algorithm
+- **Grok API**: Set GROK_API_KEY in .env file (never commit this file to Git!)
+- **Configuration**: Add your API key from https://openrouter.ai/ to .env
+- **Fallback**: If API key not set, uses rule-based algorithm automatically
 - **Performance**: Handles 50+ subjects efficiently
 - **Storage**: Saves as JSON in database
 

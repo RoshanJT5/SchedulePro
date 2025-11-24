@@ -810,3 +810,80 @@ def get_branch_courses(branch_id: int, db: Session = Depends(get_db)):
     """Get all courses for a specific branch"""
     return db.query(models.Course).filter(models.Course.branch_id == branch_id).all()
 
+
+# ========================================
+# AI-Powered Timetable Generation
+# ========================================
+
+@router.post("/generate-timetable-ai")
+async def generate_timetable_with_ai(data: dict, current_user=Depends(get_current_user)):
+    """
+    Secure endpoint to generate timetable using Grok AI.
+    This keeps the API key on the server side, not exposed to frontend.
+    """
+    import os
+    import httpx
+    
+    # Get API credentials from environment
+    grok_api_key = os.getenv("GROK_API_KEY")
+    grok_api_url = os.getenv("GROK_API_URL", "https://api.x.ai/v1/chat/completions")
+    
+    if not grok_api_key:
+        # If no API key configured, return error suggesting fallback
+        raise HTTPException(
+            status_code=503, 
+            detail="AI generation not configured. GROK_API_KEY not set in environment. Use rule-based generation instead."
+        )
+    
+    prompt = data.get("prompt", "")
+    
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt is required")
+    
+    try:
+        # Call Grok API securely from backend
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                grok_api_url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {grok_api_key}"
+                },
+                json={
+                    "model": "grok-beta",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are an expert timetable scheduler. Generate an optimal weekly timetable avoiding conflicts and balancing workload. Return ONLY valid JSON, no markdown or explanations."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 2000
+                },
+                timeout=30.0
+            )
+        
+        if response.status_code != 200:
+            error_text = response.text
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Grok API error: {error_text}"
+            )
+        
+        result = response.json()
+        ai_response = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        return {
+            "success": True,
+            "ai_response": ai_response,
+            "content": ai_response  # Alternative key for compatibility
+        }
+        
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="AI API request timed out")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calling AI API: {str(e)}")
