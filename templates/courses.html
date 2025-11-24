@@ -1,0 +1,232 @@
+<div class="max-w-7xl mx-auto relative">
+    <!-- Page Header -->
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-secondary-900">Manage Courses</h1>
+            <p class="mt-1 text-secondary-500">Add, edit, and organize all available degree programs and branches.</p>
+        </div>
+        <button onclick="openAddBranchModal()"
+            class="flex items-center justify-center gap-2 h-10 px-5 bg-[#2563eb] text-white rounded-md text-sm font-semibold shadow-sm hover:bg-[#1d4ed8] transition-colors">
+            <span class="material-symbols-outlined">add</span>
+            <span>Add Course</span>
+        </button>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="flex flex-col sm:flex-row gap-4 mb-8">
+        <div class="relative flex-1">
+            <span
+                class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-secondary-400">search</span>
+            <input id="search-input"
+                class="w-full h-12 pl-12 pr-4 rounded-md border border-secondary-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="Search by branch or course code..." type="text" />
+        </div>
+        <select id="degree-filter"
+            class="h-12 w-full sm:w-48 rounded-md border-secondary-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option value="">Filter by Degree</option>
+            <option value="B.Tech">B.Tech</option>
+            <option value="BCA">BCA</option>
+            <option value="B.Sc">B.Sc</option>
+            <option value="M.Tech">M.Tech</option>
+            <option value="MBA">MBA</option>
+        </select>
+    </div>
+
+    <!-- Main Content Area with Course Blocks -->
+    <div id="courses-container" class="space-y-12">
+        <!-- Dynamic content will be loaded here -->
+        <div class="text-center py-12 text-gray-500">Loading courses...</div>
+    </div>
+
+    <!-- Branch Detail Drawer/Modal -->
+    <div id="branch-detail-modal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog"
+        aria-modal="true">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeBranchDetail()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div
+                    class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-5xl h-[90vh] flex flex-col">
+
+                    <!-- Header -->
+                    <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-b flex-shrink-0">
+                        <button type="button" class="text-gray-400 hover:text-gray-500" onclick="closeBranchDetail()">
+                            <span class="material-symbols-outlined">close</span>
+                        </button>
+                        <div class="flex-1">
+                            <h3 class="text-2xl font-semibold leading-6 text-gray-900" id="detail-branch-name">Branch
+                                Name</h3>
+                            <p class="text-sm text-gray-500 mt-1" id="detail-branch-info">Degree • Duration</p>
+                        </div>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="flex-1 overflow-hidden flex flex-col sm:flex-row">
+                        <!-- Sidebar for Semesters -->
+                        <div class="w-full sm:w-64 bg-gray-50 border-r overflow-y-auto flex-shrink-0">
+                            <nav class="flex-1 space-y-1 px-2 py-4" id="semester-tabs">
+                                <!-- Tabs will be injected here -->
+                            </nav>
+                        </div>
+
+                        <!-- Main Subject Area -->
+                        <div class="flex-1 p-6 overflow-y-auto bg-white">
+                            <div class="flex justify-between items-center mb-6">
+                                <h4 class="text-xl font-medium text-gray-900" id="current-semester-title">Semester 1
+                                </h4>
+                                <button onclick="openAddSubjectModal()"
+                                    class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">
+                                    <span class="material-symbols-outlined text-sm">add</span>
+                                    Add Subject
+                                </button>
+                            </div>
+
+                            <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+                                <table class="min-w-full divide-y divide-gray-300">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th scope="col"
+                                                class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
+                                                Code</th>
+                                            <th scope="col"
+                                                class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                                Subject Name</th>
+                                            <th scope="col"
+                                                class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Type
+                                            </th>
+                                            <th scope="col"
+                                                class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                                Credits</th>
+                                            <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6">
+                                                <span class="sr-only">Actions</span>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200 bg-white" id="subjects-table-body">
+                                        <!-- Subjects will be injected here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Branch Modal -->
+    <div id="add-branch-modal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog"
+        aria-modal="true">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeAddBranchModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div
+                    class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+                    <form id="add-branch-form" onsubmit="handleCreateBranch(event)">
+                        <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                            <h3 class="text-lg font-semibold leading-6 text-gray-900 mb-4">Add New Course/Branch</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Degree Program</label>
+                                    <select name="degree" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                        <option value="B.Tech">B.Tech</option>
+                                        <option value="BCA">BCA</option>
+                                        <option value="B.Sc">B.Sc</option>
+                                        <option value="M.Tech">M.Tech</option>
+                                        <option value="MBA">MBA</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Branch Name</label>
+                                    <input type="text" name="name" required placeholder="e.g. Computer Science"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Branch Code</label>
+                                    <input type="text" name="code" placeholder="e.g. CSE"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">HOD Name</label>
+                                    <input type="text" name="hod_name" placeholder="e.g. Dr. Smith"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Duration (Years)</label>
+                                        <input type="number" name="duration_years" value="4" min="1" max="6" required
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Total Semesters</label>
+                                        <input type="number" name="total_semesters" value="8" min="1" max="12" required
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                            <button type="submit"
+                                class="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 sm:ml-3 sm:w-auto">Create</button>
+                            <button type="button" onclick="closeAddBranchModal()"
+                                class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Subject Modal -->
+    <div id="add-subject-modal" class="fixed inset-0 z-[60] hidden" aria-labelledby="modal-title" role="dialog"
+        aria-modal="true">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeAddSubjectModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div
+                    class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+                    <form id="add-subject-form" onsubmit="handleCreateSubject(event)">
+                        <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                            <h3 class="text-lg font-semibold leading-6 text-gray-900 mb-4">Add Subject</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Subject Name</label>
+                                    <input type="text" name="name" required placeholder="e.g. Data Structures"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Subject Code</label>
+                                    <input type="text" name="code" required placeholder="e.g. CS101"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Type</label>
+                                    <select name="subject_type" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                        <option value="Theory">Theory</option>
+                                        <option value="Lab">Lab</option>
+                                        <option value="Seminar">Seminar</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Credits</label>
+                                    <input type="number" name="credits" value="3" min="0" max="10" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-10 px-3 border">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                            <button type="submit"
+                                class="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 sm:ml-3 sm:w-auto">Add
+                                Subject</button>
+                            <button type="button" onclick="closeAddSubjectModal()"
+                                class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/courses.js"></script>

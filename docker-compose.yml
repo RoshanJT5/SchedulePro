@@ -1,0 +1,26 @@
+# docker-compose.yml
+version: '3.8'
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: plansphere
+      POSTGRES_PASSWORD: plansphere
+      POSTGRES_DB: plansphere
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  web:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql+psycopg2://plansphere:plansphere@db:5432/plansphere
+      SECRET_KEY: "dev-secret-change-me-please"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+
+volumes:
+  postgres_data:

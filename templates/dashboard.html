@@ -1,0 +1,161 @@
+<!-- Dashboard Page Content -->
+<div class="dashboard-page">
+  <!-- Page Title -->
+  <div class="mb-8">
+    <h1 class="dashboard-title">Dashboard</h1>
+  </div>
+
+  <!-- Hero Banner with Welcome Message -->
+  <div
+    class="hero-banner mb-8 bg-white rounded-2xl shadow-sm p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+    <div class="flex items-center gap-6 flex-1">
+      <div class="hero-avatar w-16 h-16 rounded-full bg-cover bg-center border-2 border-gray-200" id="hero-avatar"
+        style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBXFMQWLqsmRg5bS6iDNjEKBuZtnjl5t0x1LW-URygRq2Rgdqswzu6xopnXISSum16IlRLczTlFM6zDFRfmx1yy2mWoNJYy6ULIewoYPFH5WMDiYwiQID8AmpoSoeWhEGOIUPX0p8pkiYGWpvBerB55d7ax3rlktrmqom_1ZqFKKHK6XsY5ArvMcFnr32pkbfNSFOjq_reD9mhJhlRrCt7XU0ZJLsS3sVrtHNl57igCJvUGh_ylvrhQ-m3FdeseMQTqbVUPnhT0v8s");'>
+      </div>
+      <div>
+        <p class="banner-welcome text-lg text-gray-600">Welcome back,</p>
+        <h2 class="banner-name text-3xl font-bold text-gray-900" id="welcome-name">User</h2>
+      </div>
+    </div>
+    <div class="banner-date text-right">
+      <p class="text-sm text-gray-500">Today</p>
+      <p class="text-2xl font-semibold text-gray-900" id="banner-date">--:--</p>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="quick-actions mb-8 flex flex-col sm:flex-row gap-4">
+    <button id="new-timetable-btn"
+      class="btn-primary flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg">
+      <span class="material-symbols-outlined text-lg">add</span>
+      New Timetable
+    </button>
+    <button
+      class="btn-secondary flex items-center justify-center gap-2 px-6 py-3 border-2 border-blue-600 text-blue-600 rounded-full font-semibold hover:bg-blue-50 transition-all">
+      <span class="material-symbols-outlined text-lg">download</span>
+      Import Timetable
+    </button>
+  </div>
+
+  <!-- Cards Grid -->
+  <div class="cards-grid grid grid-cols-1 md:grid-cols-2 gap-8">
+    <!-- Upcoming Schedules Card -->
+    <div class="dashboard-card bg-white rounded-2xl shadow-sm p-8 flex flex-col items-center justify-center min-h-80">
+      <div class="card-placeholder mb-6">
+        <svg class="w-24 h-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+        </svg>
+      </div>
+      <h3 class="card-title text-xl font-semibold text-gray-900 mb-2">Upcoming Schedules</h3>
+      <p class="card-description text-sm text-gray-500">No upcoming schedules yet</p>
+    </div>
+
+    <!-- Pending Tasks Card -->
+    <div class="dashboard-card bg-white rounded-2xl shadow-sm p-8 flex flex-col items-center justify-center min-h-80">
+      <div class="card-placeholder mb-6">
+        <svg class="w-24 h-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+      </div>
+      <h3 class="card-title text-xl font-semibold text-gray-900 mb-2">Pending Tasks</h3>
+      <p class="card-description text-sm text-gray-500">All tasks completed!</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Initialize dashboard with dynamic data
+  // NOTE: This script runs when dashboard.html is loaded via AJAX
+  // Use setTimeout to ensure DOM elements are available
+  setTimeout(() => {
+    console.log('[Dashboard Script] Initializing dashboard inline script');
+
+    // Update date
+    const updateDate = () => {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const bannerDateEl = document.getElementById('banner-date');
+      if (bannerDateEl) {
+        bannerDateEl.textContent = dateStr;
+      }
+    };
+    updateDate();
+    setInterval(updateDate, 60000); // Update every minute
+
+    // Fetch user info and update welcome message
+    const fetchUserInfo = async () => {
+      try {
+        const token = localStorage.getItem("plansphere_token");
+        if (token) {
+          const res = await fetch("/v1/me", {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const user = await res.json();
+            const welcomeNameEl = document.getElementById('welcome-name');
+            if (welcomeNameEl) {
+              welcomeNameEl.textContent = user.full_name || 'User';
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch user info:', err);
+      }
+    };
+    fetchUserInfo();
+
+    // New Timetable button handler
+    const newTimetableBtn = document.getElementById('new-timetable-btn');
+    console.log('[Dashboard Script] New Timetable button found:', newTimetableBtn);
+
+    if (newTimetableBtn) {
+      newTimetableBtn.addEventListener('click', async () => {
+        console.log('[Dashboard Script] New Timetable button clicked!');
+        try {
+          const token = localStorage.getItem("plansphere_token");
+          if (!token) {
+            alert('Please login first');
+            return;
+          }
+
+          console.log('[Dashboard Script] Creating new timetable via API...');
+
+          // Create new timetable
+          const res = await fetch("/v1/timetables", {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ name: 'New Timetable' })
+          });
+
+          console.log('[Dashboard Script] API response status:', res.status);
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error('[Dashboard Script] Failed to create timetable:', errorText);
+            alert('Failed to create timetable: ' + errorText);
+            return;
+          }
+
+          const timetable = await res.json();
+          console.log('[Dashboard Script] Timetable created:', timetable);
+
+          // Save current timetable id and redirect to Step 1 (structure)
+          localStorage.setItem('current_timetable_id', timetable.id);
+          console.log('[Dashboard Script] Redirecting to structure page with id:', timetable.id);
+          window.location.hash = `#structure-${timetable.id}`;
+        } catch (err) {
+          console.error('[Dashboard Script] Error creating timetable:', err);
+          alert('Error creating timetable: ' + err.message);
+        }
+      });
+      console.log('[Dashboard Script] Event listener attached to New Timetable button');
+    } else {
+      console.error('[Dashboard Script] New Timetable button not found!');
+    }
+  }, 100); // Small delay to ensure DOM is ready
+</script>

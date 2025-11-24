@@ -1,0 +1,587 @@
+/* ========================================
+   PlanSphere Custom Dashboard Styles
+   ======================================== */
+
+/* Color Variables */
+:root {
+  --primary-blue: #2B6FF2;
+  --primary-blue-dark: #1e4ba8;
+  --primary-blue-light: #3b7cff;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-900: #111827;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* ========================================
+   Sidebar Styles
+   ======================================== */
+
+.sidebar-container {
+  width: 220px;
+  background-color: white;
+  border-right: 1px solid #e5e7eb;
+}
+
+.sidebar-container[data-collapsed="false"] {
+  width: 220px;
+}
+
+.sidebar-container[data-collapsed="true"] {
+  width: 72px;
+}
+
+/* Responsive: narrow on mobile */
+@media (max-width: 768px) {
+  .sidebar-container {
+    width: 72px;
+  }
+  
+  .sidebar-label {
+    display: none !important;
+  }
+}
+
+.sidebar-logo-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.sidebar-logo-icon {
+  width: 40px;
+  height: 40px;
+  transition: transform 0.3s ease;
+}
+
+.sidebar-logo-icon:hover {
+  transform: rotate(10deg) scale(1.1);
+}
+
+/* Navigation Items */
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  font-weight: 500;
+  color: #6b7280;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.sidebar-nav-item:hover {
+  color: #2B6FF2;
+  background-color: rgba(43, 111, 242, 0.05);
+}
+
+/* Active state with blue pill */
+.sidebar-nav-item.active {
+  background: linear-gradient(135deg, #2B6FF2, #1e4ba8);
+  color: white;
+  border-radius: 50px;
+  box-shadow: 0 4px 12px rgba(43, 111, 242, 0.3);
+  font-weight: 600;
+}
+
+.sidebar-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.sidebar-label {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* Hide labels on small screens */
+@media (max-width: 1023px) {
+  .sidebar-label {
+    display: none !important;
+  }
+  
+  .sidebar-nav-item {
+    justify-content: center;
+  }
+}
+
+/* ========================================
+   Header/Top Bar Styles
+   ======================================== */
+
+.header-container {
+  background-color: white;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+#date-widget {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* ========================================
+   Main Content Area Styles
+   ======================================== */
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.3s ease;
+  margin-left: 72px;
+}
+
+@media (min-width: 1024px) {
+  .main-content {
+    margin-left: 220px;
+  }
+}
+
+.content-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background-color: #f9fafb;
+}
+
+/* ========================================
+   Dashboard Page Styles
+   ======================================== */
+
+.dashboard-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Page Title */
+.dashboard-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.02em;
+}
+
+/* Hero Banner */
+.hero-banner {
+  background: white;
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: 2rem;
+  border: 1px solid #e5e7eb;
+  transition: all 0.3s ease;
+}
+
+.hero-banner:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.hero-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid #e5e7eb;
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
+}
+
+.banner-welcome {
+  font-size: 16px;
+  color: #6b7280;
+  margin-bottom: 0.25rem;
+}
+
+.banner-name {
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.banner-date {
+  text-align: right;
+}
+
+#banner-date {
+  font-size: 24px;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* Responsive hero banner */
+@media (max-width: 768px) {
+  .hero-banner {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.5rem;
+  }
+
+  .hero-avatar {
+    width: 48px;
+    height: 48px;
+  }
+
+  .banner-name {
+    font-size: 24px;
+  }
+
+  .banner-date {
+    text-align: center;
+    margin-top: 1rem;
+  }
+}
+
+/* ========================================
+   Quick Actions Styles
+   ======================================== */
+
+.quick-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+
+/* Primary Button */
+.btn-primary {
+  background-color: #2B6FF2;
+  color: white;
+  border-radius: 50px;
+  padding: 12px 24px;
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(43, 111, 242, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary:hover {
+  background-color: #1e4ba8;
+  box-shadow: 0 6px 20px rgba(43, 111, 242, 0.4);
+  transform: translateY(-2px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Secondary Button */
+.btn-secondary {
+  background-color: white;
+  color: #2B6FF2;
+  border: 2px solid #2B6FF2;
+  border-radius: 50px;
+  padding: 12px 24px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-secondary:hover {
+  background-color: rgba(43, 111, 242, 0.05);
+  border-color: #1e4ba8;
+  color: #1e4ba8;
+}
+
+/* Responsive buttons */
+@media (max-width: 640px) {
+  .btn-primary,
+  .btn-secondary {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .quick-actions {
+    flex-direction: column;
+  }
+}
+
+/* ========================================
+   Cards Grid Styles
+   ======================================== */
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+@media (max-width: 768px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+/* Dashboard Card */
+.dashboard-card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: 2rem;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  transition: all 0.3s ease;
+  text-align: center;
+}
+
+.dashboard-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  border-color: #2B6FF2;
+}
+
+/* Card Placeholder Icon */
+.card-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  background-color: #f3f4f6;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.card-placeholder svg {
+  width: 64px;
+  height: 64px;
+  color: #d1d5db;
+}
+
+/* Card Title */
+.card-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.5rem;
+}
+
+/* Card Description */
+.card-description {
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+/* ========================================
+   Typography Styles
+   ======================================== */
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #111827;
+  background-color: #f9fafb;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+/* ========================================
+   Scrollbar Styles
+   ======================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Main Content Area Responsive Margin */
+.main-content {
+  margin-left: 220px !important;
+  transition: margin-left 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 72px !important;
+  }
+}
+
+/* ========================================
+   Responsive Design - Mobile First
+   ======================================== */
+
+@media (max-width: 640px) {
+  .dashboard-title {
+    font-size: 24px;
+  }
+
+  .content-wrapper {
+    padding: 1rem;
+  }
+
+  .hero-banner {
+    padding: 1.5rem;
+  }
+
+  .dashboard-card {
+    min-height: 280px;
+    padding: 1.5rem;
+  }
+}
+
+/* ========================================
+   Utilities
+   ======================================== */
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus states for keyboard navigation */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #2B6FF2;
+  outline-offset: 2px;
+}
+
+/* ========================================
+   Timetable Wizard Styles
+   ======================================== */
+
+.wizard-container {
+  max-width: 56rem; /* max-w-4xl */
+  margin: 0 auto;
+}
+
+.wizard-card {
+  background: white;
+  border-radius: 1rem;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
+  padding: 2rem;
+}
+
+/* Option Cards (Working Days) */
+.wizard-option-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background-color: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.wizard-option-card:hover {
+  border-color: var(--primary-blue-light);
+  background-color: var(--gray-50);
+}
+
+/* Selected state using :has() */
+.wizard-option-card:has(input:checked) {
+  border-color: var(--primary-blue);
+  background-color: rgba(43, 111, 242, 0.05);
+  color: var(--primary-blue);
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(43, 111, 242, 0.1);
+}
+
+.wizard-option-card input[type='checkbox'] {
+  accent-color: var(--primary-blue);
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* Inputs */
+.wizard-input {
+  width: 100%;
+  border: 1px solid var(--gray-200);
+  border-radius: 0.5rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.wizard-input:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(43, 111, 242, 0.1);
+}
+
+/* Next Button */
+.wizard-btn-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, var(--primary-blue), var(--primary-blue-dark));
+  color: white;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(43, 111, 242, 0.2);
+}
+
+.wizard-btn-next:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(43, 111, 242, 0.3);
+}
+
+.wizard-btn-next:active {
+  transform: translateY(0);
+}
+

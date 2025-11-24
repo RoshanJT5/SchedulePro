@@ -1,0 +1,151 @@
+<div class="max-w-7xl mx-auto relative">
+    <!-- Page Header -->
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">AI Timetable Generator</h1>
+            <p class="mt-1 text-gray-500">Generate optimized timetables automatically using AI</p>
+        </div>
+    </div>
+
+    <!-- Selection Controls -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Select Class Details</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Degree</label>
+                <select id="degree-select" onchange="handleDegreeChange()"
+                    class="w-full h-10 px-3 rounded-md border-gray-300 border focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select Degree</option>
+                    <option value="B.Tech">B.Tech</option>
+                    <option value="BCA">BCA</option>
+                    <option value="B.Sc">B.Sc</option>
+                    <option value="M.Tech">M.Tech</option>
+                    <option value="MBA">MBA</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Branch</label>
+                <select id="branch-select" onchange="handleBranchChange()"
+                    class="w-full h-10 px-3 rounded-md border-gray-300 border focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select Branch</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Semester</label>
+                <select id="semester-select"
+                    class="w-full h-10 px-3 rounded-md border-gray-300 border focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select Semester</option>
+                </select>
+            </div>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="generateTimetable()" id="generate-btn"
+                class="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold shadow-lg hover:from-blue-700 hover:to-purple-700 transition-all">
+                <span class="material-symbols-outlined">auto_awesome</span>
+                <span>✨ Auto-Generate Timetable</span>
+            </button>
+            <button onclick="saveTimetable()" id="save-btn" disabled
+                class="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg font-semibold shadow-lg hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <span class="material-symbols-outlined">save</span>
+                <span>Save Timetable</span>
+            </button>
+            <button onclick="clearTimetable()" id="clear-btn" disabled
+                class="flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold shadow-lg hover:bg-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <span class="material-symbols-outlined">delete</span>
+                <span>Clear</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Timetable Grid -->
+    <div class="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+        <div class="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900" id="timetable-title">Weekly Schedule</h3>
+            <p class="text-sm text-gray-600">Drag and drop to rearrange • Click to edit details</p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <div id="timetable-grid" class="min-w-[900px]">
+                <!-- Grid will be generated here -->
+                <div class="p-12 text-center text-gray-400">
+                    <span class="material-symbols-outlined text-6xl mb-4">calendar_month</span>
+                    <p class="text-lg">Select a class and click "Generate" to create a timetable</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-lg p-8 max-w-sm text-center">
+            <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Generating Timetable...</h3>
+            <p class="text-sm text-gray-600">AI is analyzing your courses and instructors</p>
+        </div>
+    </div>
+
+    <!-- Edit Slot Modal -->
+    <div id="edit-slot-modal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog"
+        aria-modal="true">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeEditModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div
+                    class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+                    <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div
+                                class="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
+                                <span class="material-symbols-outlined text-blue-600">edit</span>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-900" id="edit-modal-title">Edit Slot</h3>
+                                <p class="text-sm text-gray-500" id="edit-modal-time">Monday, 9:00 AM</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                                <select id="edit-subject"
+                                    class="w-full h-10 px-3 rounded-md border-gray-300 border focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">Free Slot</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Instructor</label>
+                                <select id="edit-instructor"
+                                    class="w-full h-10 px-3 rounded-md border-gray-300 border focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">Select Instructor</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Classroom</label>
+                                <select id="edit-classroom"
+                                    class="w-full h-10 px-3 rounded-md border-gray-300 border focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">Select Classroom</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                        <button type="button" onclick="saveSlotEdit()"
+                            class="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 sm:w-auto">
+                            Save Changes
+                        </button>
+                        <button type="button" onclick="clearSlot()"
+                            class="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:w-auto">
+                            Clear Slot
+                        </button>
+                        <button type="button" onclick="closeEditModal()"
+                            class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/timetable-generator.js"></script>

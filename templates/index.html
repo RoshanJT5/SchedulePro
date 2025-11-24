@@ -1,0 +1,94 @@
+<!-- frontend/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login</title>
+</head>
+<body>
+  <!DOCTYPE html>
+  <html lang="en">
+
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PlanSphere | Sign In</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <style>
+      body { font-family: 'Inter', sans-serif; }
+      .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+  </head>
+
+  <body class="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center">
+    <div class="max-w-md w-full mx-4">
+      <div class="bg-white shadow-lg rounded-2xl overflow-hidden">
+        <div class="p-6 text-center border-b border-gray-100">
+          <img src="/images/PS_Logo.svg" alt="PlanSphere" class="mx-auto w-20 h-20 mb-3" />
+          <h1 class="text-2xl font-bold text-gray-800">PlanSphere</h1>
+          <p class="text-sm text-gray-500 mt-1">Smart Timetable Management</p>
+        </div>
+
+        <div class="p-6">
+          <div class="flex items-center justify-center gap-2 mb-4">
+            <button id="tab-login" class="px-4 py-2 rounded-md text-sm font-semibold bg-blue-600 text-white">Sign in</button>
+            <button id="tab-register" class="px-4 py-2 rounded-md text-sm font-medium text-gray-600 border border-gray-200">Create account</button>
+          </div>
+
+          <div id="auth-msg" class="text-sm text-center text-red-600 mb-3 hidden"></div>
+
+          <!-- Login form -->
+          <form id="login-form" class="space-y-4">
+            <div>
+              <label for="login-email" class="block text-xs font-medium text-gray-600">Email</label>
+              <input id="login-email" name="email" type="email" required class="mt-1 block w-full rounded-md border-gray-200 shadow-sm focus:ring-2 focus:ring-blue-300 p-2" placeholder="you@example.com" />
+            </div>
+            <div>
+              <label for="login-password" class="block text-xs font-medium text-gray-600">Password</label>
+              <input id="login-password" name="password" type="password" required class="mt-1 block w-full rounded-md border-gray-200 shadow-sm focus:ring-2 focus:ring-blue-300 p-2" placeholder="Your password" />
+            </div>
+            <div>
+              <button id="login-btn" type="submit" class="w-full py-2 rounded-md bg-blue-600 text-white font-semibold">Sign In</button>
+            </div>
+          </form>
+
+          <!-- Register form -->
+          <form id="register-form" class="hidden space-y-4">
+            <div>
+              <label for="reg-fullname" class="block text-xs font-medium text-gray-600">Full name</label>
+              <input id="reg-fullname" type="text" class="mt-1 block w-full rounded-md border-gray-200 shadow-sm focus:ring-2 focus:ring-green-300 p-2" placeholder="Your full name" />
+            </div>
+            <div>
+              <label for="reg-email" class="block text-xs font-medium text-gray-600">Email</label>
+              <input id="reg-email" type="email" class="mt-1 block w-full rounded-md border-gray-200 shadow-sm focus:ring-2 focus:ring-green-300 p-2" placeholder="you@example.com" />
+            </div>
+            <div>
+              <label for="reg-password" class="block text-xs font-medium text-gray-600">Password</label>
+              <input id="reg-password" type="password" class="mt-1 block w-full rounded-md border-gray-200 shadow-sm focus:ring-2 focus:ring-green-300 p-2" placeholder="Minimum 6 characters" />
+            </div>
+            <div>
+              <label for="reg-role" class="block text-xs font-medium text-gray-600">Role</label>
+              <select id="reg-role" class="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2">
+                <option value="student">Student</option>
+                <option value="teacher" selected>Teacher</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <button id="register-btn" type="submit" class="w-full py-2 rounded-md bg-green-600 text-white font-semibold">Create Account</button>
+            </div>
+          </form>
+
+          <p class="mt-4 text-xs text-center text-gray-400">By creating an account you agree to our <a href="#" class="text-blue-600 underline">Terms</a>.</p>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+  </body>
+
+</html>

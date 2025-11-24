@@ -1,0 +1,54 @@
+<div class="max-w-7xl mx-auto">
+    <div class="flex flex-col gap-4 mb-8">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <h2 class="text-gray-900 text-3xl font-bold leading-tight tracking-tight">Generated Timetable</h2>
+                <p class="text-gray-500 text-base font-normal leading-normal mt-1">Your weekly schedule is ready.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button
+                    class="flex items-center justify-center h-10 px-4 rounded-md bg-white border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-100">
+                    <span class="material-symbols-outlined mr-2 text-lg">share</span>
+                    Share
+                </button>
+                <div class="relative">
+                    <button
+                        class="flex items-center justify-center h-10 px-4 rounded-md bg-white border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-100 peer">
+                        <span class="material-symbols-outlined mr-2 text-lg">download</span>
+                        Download
+                    </button>
+                    <div
+                        class="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-10 hidden peer-focus:block hover:block">
+                        <a class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" href="#">Download as PDF</a>
+                        <a class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" href="#">Download as CSV</a>
+                        <a class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" href="#">Download as PNG</a>
+                    </div>
+                </div>
+                                <a href="#class-editor" id="edit-link"
+                                        class="flex items-center justify-center h-10 px-4 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                                        <span class="material-symbols-outlined mr-2 text-lg">edit</span>
+                                        Edit
+                                </a>
+                                <script>
+                                    document.addEventListener('DOMContentLoaded', () => {
+                                        const tid = localStorage.getItem('current_timetable_id');
+                                        const edit = document.getElementById('edit-link');
+                                        if (tid && edit) edit.setAttribute('href', `#class-editor-${tid}`);
+                                    });
+                                </script>
+            </div>
+        </div>
+        <div class="mt-2">
+            <label for="class-selector" class="block text-sm font-medium text-gray-700">View Timetable For:</label>
+            <select id="class-selector" class="mt-1 block w-full sm:w-64 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></select>
+        </div>
+    </div>
+    <div class="w-full overflow-x-auto rounded-lg border border-secondary-200 bg-white shadow-sm">
+        <table class="w-full table-fixed min-w-[900px]">
+            <thead id="timetable-head" class="bg-gray-50">
+                </thead>
+            <tbody id="timetable-body" class="divide-y divide-gray-200">
+                </tbody>
+        </table>
+    </div>
+</div>

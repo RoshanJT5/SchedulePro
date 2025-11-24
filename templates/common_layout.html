@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PlanSphere.ai</title>
+    <link href="data:image/x-icon;base64," rel="icon" type="image/x-icon" />
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/images/PS_Logo.svg" />
+    <link rel="icon" type="image/png" href="/images/PS_Logo.png" sizes="96x96" />
+    <link rel="shortcut icon" href="/images/PS_Logo.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/PS_Logo.svg" />
+    <meta name="apple-mobile-web-app-title" content="PlanSphere" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <!-- Custom Dashboard Styles -->
+    <link rel="stylesheet" href="static/css/custom-dashboard.css">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900">
+    <div class="flex h-screen bg-gray-50">
+        <!-- Left Vertical Sidebar -->
+        <aside
+            class="sidebar-container fixed left-0 top-0 h-full bg-white border-r border-gray-200 flex flex-col z-40 transition-all duration-300"
+            data-collapsed="false">
+            <!-- Logo Section -->
+            <div class="sidebar-logo-section px-3 py-4 border-b border-gray-200 flex items-center justify-center">
+                <img src="/images/PS_Logo.svg" alt="PlanSphere" class="sidebar-logo-icon w-10 h-10" />
+            </div>
+
+            <!-- Navigation Items -->
+            <nav class="sidebar-nav flex-1 px-2 py-4 overflow-y-auto">
+                <ul class="space-y-2">
+                    <!-- Dashboard -->
+                    <li>
+                        <a href="#dashboard"
+                            class="sidebar-nav-item active flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-gray-600 hover:text-blue-600 transition-all"
+                            data-page="dashboard">
+                            <span class="material-symbols-outlined sidebar-icon">dashboard</span>
+                            <span class="sidebar-label hidden lg:inline text-sm">Dashboard</span>
+                        </a>
+                    </li>
+
+                    <!-- Timetables -->
+                    <li>
+                        <a href="#timetables-list"
+                            class="sidebar-nav-item flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-gray-600 hover:text-blue-600 transition-all"
+                            data-page="timetables-list">
+                            <span class="material-symbols-outlined sidebar-icon">calendar_month</span>
+                            <span class="sidebar-label hidden lg:inline text-sm">Timetables</span>
+                        </a>
+                    </li>
+
+                    <!-- Courses -->
+                    <li>
+                        <a href="#courses"
+                            class="sidebar-nav-item flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-gray-600 hover:text-blue-600 transition-all"
+                            data-page="courses">
+                            <span class="material-symbols-outlined sidebar-icon">book</span>
+                            <span class="sidebar-label hidden lg:inline text-sm">Courses</span>
+                        </a>
+                    </li>
+
+                    <!-- Instructors -->
+                    <li>
+                        <a href="#instructors"
+                            class="sidebar-nav-item flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-gray-600 hover:text-blue-600 transition-all"
+                            data-page="instructors">
+                            <span class="material-symbols-outlined sidebar-icon">person</span>
+                            <span class="sidebar-label hidden lg:inline text-sm">Instructors</span>
+                        </a>
+                    </li>
+
+                </ul>
+            </nav>
+
+            <!-- Settings (Bottom) -->
+            <div class="border-t border-gray-200 px-2 py-3">
+                <a href="#settings"
+                    class="sidebar-nav-item flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-gray-600 hover:text-blue-600 transition-all"
+                    data-page="settings">
+                    <span class="material-symbols-outlined sidebar-icon">settings</span>
+                    <span class="sidebar-label hidden lg:inline text-sm">Settings</span>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content flex-1 flex flex-col transition-all duration-300" id="main-content">
+            <!-- Top Header -->
+            <header
+                class="header-container h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-30">
+                <!-- Left Section (Empty or branding) -->
+                <div class="flex-1"></div>
+
+                <!-- Right Section (Avatar + Bell + Date) -->
+                <div class="flex items-center gap-4">
+                    <!-- Date Widget -->
+                    <div class="text-sm text-gray-600 hidden md:block" id="date-widget">
+                        <span id="current-date">{{ current_date }}</span>
+                    </div>
+
+                    <!-- Bell Icon (Notifications) -->
+                    <button class="p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
+                        aria-label="Notifications">
+                        <span class="material-symbols-outlined">notifications</span>
+                    </button>
+
+                    <!-- Avatar -->
+                    <div class="w-10 h-10 rounded-full bg-cover bg-center border-2 border-gray-200" id="user-avatar"
+                        style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBXFMQWLqsmRg5bS6iDNjEKBuZtnjl5t0x1LW-URygRq2Rgdqswzu6xopnXISSum16IlRLczTlFM6zDFRfmx1yy2mWoNJYy6ULIewoYPFH5WMDiYwiQID8AmpoSoeWhEGOIUPX0p8pkiYGWpvBerB55d7ax3rlktrmqom_1ZqFKKHK6XsY5ArvMcFnr32pkbfNSFOjq_reD9mhJhlRrCt7XU0ZJLsS3sVrtHNl57igCJvUGh_ylvrhQ-m3FdeseMQTqbVUPnhT0v8s");'>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <div class="content-wrapper flex-1 overflow-y-auto p-6">
+                <div id="page-content" class="w-full">
+                    <!-- Content will be dynamically loaded here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>

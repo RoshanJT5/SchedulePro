@@ -1,0 +1,150 @@
+<div class="max-w-7xl mx-auto">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-secondary-900">Your Timetables</h1>
+            <p class="mt-1 text-secondary-500">Manage all your created schedules in one place.</p>
+        </div>
+        <a href="#structure"
+            class="flex items-center justify-center gap-2 h-10 px-5 bg-[#2563eb] text-white rounded-md text-sm font-semibold shadow-sm hover:bg-[#1d4ed8] transition-colors">
+            <span class="material-symbols-outlined text-base">add</span>
+            <span>Create New Timetable</span>
+        </a>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-4 mb-8">
+        <div class="relative flex-1">
+            <span
+                class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-secondary-400">search</span>
+            <input
+                class="w-full h-12 pl-12 pr-4 rounded-md border border-secondary-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="Search timetables..." type="text" />
+        </div>
+        <select
+            class="h-12 w-full sm:w-48 rounded-md border-secondary-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option>Sort by Last Modified</option>
+            <option>Sort by Name</option>
+            <option>Sort by Creation Date</option>
+        </select>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+
+        <div
+            class="bg-white border border-secondary-200 rounded-lg shadow-sm p-6 flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+            <div class="flex justify-between items-start">
+                <div class="flex items-center gap-4">
+                    <div
+                        class="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-green-100 text-green-600 rounded-lg">
+                        <span class="material-symbols-outlined">edit_calendar</span>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-secondary-900">1st Semester 2025</h3>
+                        <div class="mt-1">
+                            <span
+                                class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
+                                <span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                                Published
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <button class="text-secondary-400 hover:text-secondary-600"><span
+                        class="material-symbols-outlined">more_vert</span></button>
+            </div>
+            <ul class="text-sm text-secondary-500 space-y-2 mt-4 flex-grow">
+                <li class="flex items-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">event</span>Created: 2025-08-15
+                </li>
+                <li class="flex items-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">book</span>Contains 45 Courses
+                </li>
+                <li class="flex items-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">person</span>20 Instructors</li>
+            </ul>
+            <div class="mt-6 pt-4 border-t border-secondary-100">
+                <a href="#timetable"
+                    class="w-full inline-block bg-primary-50 text-primary-700 font-semibold py-2 px-4 rounded-md hover:bg-primary-100 transition-colors text-sm text-center">View
+                    Timetable</a>
+            </div>
+        </div>
+
+        <div
+            class="bg-white border border-secondary-200 rounded-lg shadow-sm p-6 flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+            <div class="flex justify-between items-start">
+                <div class="flex items-center gap-4">
+                    <div
+                        class="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-blue-100 text-blue-600 rounded-lg">
+                        <span class="material-symbols-outlined">edit_calendar</span>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-secondary-900">2nd Semester 2025</h3>
+                        <div class="mt-1">
+                            <span
+                                class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
+                                <span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                                Published
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <button class="text-secondary-400 hover:text-secondary-600"><span
+                        class="material-symbols-outlined">more_vert</span></button>
+            </div>
+            <ul class="text-sm text-secondary-500 space-y-2 mt-4 flex-grow">
+                <li class="flex items-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">event</span>Created: 2025-01-10
+                </li>
+                <li class="flex items-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">book</span>Contains 42 Courses
+                </li>
+                <li class="flex items-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">person</span>18 Instructors</li>
+            </ul>
+            <div class="mt-6 pt-4 border-t border-secondary-100">
+                <a href="#timetable"
+                    class="w-full inline-block bg-primary-50 text-primary-700 font-semibold py-2 px-4 rounded-md hover:bg-primary-100 transition-colors text-sm text-center">View
+                    Timetable</a>
+            </div>
+        </div>
+
+        <div
+            class="bg-white border border-secondary-200 rounded-lg shadow-sm p-6 flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+            <div class="flex justify-between items-start">
+                <div class="flex items-center gap-4">
+                    <div
+                        class="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-orange-100 text-orange-600 rounded-lg">
+                        <span class="material-symbols-outlined">edit_calendar</span>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-secondary-900">Exam Week Schedule</h3>
+                        <div class="mt-1">
+                            <span
+                                class="inline-flex items-center gap-1.5 rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800">
+                                <span class="h-1.5 w-1.5 rounded-full bg-yellow-500"></span>
+                                Draft
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <button class="text-secondary-400 hover:text-secondary-600"><span
+                        class="material-symbols-outlined">more_vert</span></button>
+            </div>
+            <ul class="text-sm text-secondary-500 space-y-2 mt-4 flex-grow">
+                <li class="flex items-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">event</span>Created: 2024-12-01
+                </li>
+                <li class="flex items-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">book</span>Contains 55 Courses
+                </li>
+                <li class="flex items-center gap-2"><span
+                        class="material-symbols-outlined text-base text-secondary-400">person</span>25 Instructors</li>
+            </ul>
+            <div class="mt-6 pt-4 border-t border-secondary-100">
+                <a href="#timetable"
+                    class="w-full inline-block bg-primary-50 text-primary-700 font-semibold py-2 px-4 rounded-md hover:bg-primary-100 transition-colors text-sm text-center">View
+                    Timetable</a>
+            </div>
+        </div>
+
+    </div>
+</div>

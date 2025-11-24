@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>View Timetable - PlanSphere</title>
+  <link href="https://fonts.googleapis.com" rel="preconnect" />
+  <link crossorigin href="https://fonts.gstatic.com" rel="preconnect" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    .timetable-cell {
+      min-height: 80px;
+      border: 1px solid #e5e7eb;
+      padding: 12px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50">
+  <div class="min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+      <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <a href="/dashboard.html" class="flex items-center gap-3 hover:opacity-80">
+            <img src="PS_Logo.svg" alt="PlanSphere" class="w-10 h-10" />
+            <h1 class="text-xl font-bold text-gray-800">PlanSphere</h1>
+          </a>
+        </div>
+        <div class="flex gap-4">
+          <a href="/timetable-setup.html" class="px-4 py-2 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700">
+            ← Back to Setup
+          </a>
+          <a href="/dashboard.html" class="px-4 py-2 bg-gray-600 text-white rounded-md font-semibold hover:bg-gray-700">
+            Dashboard
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-6 py-8">
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800">Generated Timetable</h1>
+        <p class="text-gray-600 mt-2">Your automated timetable based on the courses, instructors, and rooms you configured</p>
+      </div>
+
+      <!-- Session Info -->
+      <div class="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg shadow-sm border mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <p class="text-sm text-gray-600">Course</p>
+            <p id="session-course" class="text-lg font-bold text-gray-800">Loading...</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-600">Instructor</p>
+            <p id="session-instructor" class="text-lg font-bold text-gray-800">Loading...</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-600">Room</p>
+            <p id="session-room" class="text-lg font-bold text-gray-800">Loading...</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-600">Time Slot</p>
+            <p id="session-timeslot" class="text-lg font-bold text-gray-800">Loading...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Timetable Grid -->
+      <div class="bg-white rounded-lg shadow-sm border overflow-auto">
+        <table class="w-full">
+          <thead class="bg-gray-100 border-b-2 border-gray-300">
+            <tr>
+              <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Time Slot</th>
+              <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Monday</th>
+              <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Tuesday</th>
+              <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Wednesday</th>
+              <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Thursday</th>
+              <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Friday</th>
+            </tr>
+          </thead>
+          <tbody id="timetable-body">
+            <tr>
+              <td colspan="6" class="text-center py-12 text-gray-500">
+                Loading timetable data...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Session Details -->
+      <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Course Details -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+          <h3 class="text-lg font-bold text-gray-800 mb-4">📚 Course Details</h3>
+          <div id="course-details" class="space-y-2 text-sm">
+            <p class="text-gray-500">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Instructor Details -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+          <h3 class="text-lg font-bold text-gray-800 mb-4">👨‍🏫 Instructor Details</h3>
+          <div id="instructor-details" class="space-y-2 text-sm">
+            <p class="text-gray-500">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Room Details -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+          <h3 class="text-lg font-bold text-gray-800 mb-4">🏫 Room Details</h3>
+          <div id="room-details" class="space-y-2 text-sm">
+            <p class="text-gray-500">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Time Slot Details -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+          <h3 class="text-lg font-bold text-gray-800 mb-4">⏰ Time Slot Details</h3>
+          <div id="timeslot-details" class="space-y-2 text-sm">
+            <p class="text-gray-500">Loading...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="mt-8 flex gap-4 justify-center">
+        <button id="export-btn" class="bg-green-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-green-700 transition">
+          📥 Export as PDF
+        </button>
+        <button id="print-btn" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition">
+          🖨️ Print
+        </button>
+        <a href="/dashboard.html" class="bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-gray-700 transition">
+          ← Back to Dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Authentication check
+    const token = localStorage.getItem("plansphere_token");
+    if (!token) {
+      alert("Please log in first");
+      window.location.href = "/";
+      throw new Error("Not authenticated");
+    }
+
+    const API_BASE = "";
+
+    async function fetchAPI(endpoint, options = {}) {
+      const res = await fetch(API_BASE + endpoint, {
+        ...options,
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+          ...(options.headers || {})
+        }
+      });
+      if (res.status === 401) {
+        localStorage.removeItem("plansphere_token");
+        window.location.href = "/";
+        return null;
+      }
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`API Error: ${res.status} - ${text}`);
+      }
+      return res.json();
+    }
+
+    async function loadSessionData() {
+      const sessionId = localStorage.getItem("timetable_session_id");
+      if (!sessionId) {
+        document.getElementById("timetable-body").innerHTML = '<tr><td colspan="6" class="text-center py-12 text-red-500">No session data found. Please create a timetable first.</td></tr>';
+        return;
+      }
+
+      try {
+        const session = await fetchAPI(`/v1/sessions/${sessionId}`);
+
+        // Display session summary
+        document.getElementById("session-course").textContent = session.course?.name || "N/A";
+        document.getElementById("session-instructor").textContent = session.instructor?.name || "N/A";
+        document.getElementById("session-room").textContent = session.room?.name || "N/A";
+        document.getElementById("session-timeslot").textContent = `${session.timeslot?.day_of_week} ${session.timeslot?.start_time}` || "N/A";
+
+        // Display course details
+        if (session.course) {
+          document.getElementById("course-details").innerHTML = `
+            <p><strong>Code:</strong> ${session.course.code}</p>
+            <p><strong>Name:</strong> ${session.course.name}</p>
+            <p><strong>Credits:</strong> ${session.course.credits}</p>
+            <p><strong>Department:</strong> ${session.course.department}</p>
+          `;
+        }
+
+        // Display instructor details
+        if (session.instructor) {
+          document.getElementById("instructor-details").innerHTML = `
+            <p><strong>Name:</strong> ${session.instructor.name}</p>
+            <p><strong>Email:</strong> ${session.instructor.email}</p>
+            <p><strong>Department:</strong> ${session.instructor.department}</p>
+            <p><strong>Phone:</strong> ${session.instructor.phone}</p>
+          `;
+        }
+
+        // Display room details
+        if (session.room) {
+          document.getElementById("room-details").innerHTML = `
+            <p><strong>Name:</strong> ${session.room.name}</p>
+            <p><strong>Building:</strong> ${session.room.building}</p>
+            <p><strong>Type:</strong> ${session.room.room_type}</p>
+            <p><strong>Capacity:</strong> ${session.room.capacity}</p>
+          `;
+        }
+
+        // Display time slot details
+        if (session.timeslot) {
+          document.getElementById("timeslot-details").innerHTML = `
+            <p><strong>Day:</strong> ${session.timeslot.day_of_week}</p>
+            <p><strong>Time:</strong> ${session.timeslot.start_time} - ${session.timeslot.end_time}</p>
+            <p><strong>Name:</strong> ${session.timeslot.name}</p>
+          `;
+        }
+
+        // Generate sample timetable grid
+        renderTimetableGrid(session);
+      } catch (err) {
+        console.error(err);
+        document.getElementById("timetable-body").innerHTML = '<tr><td colspan="6" class="text-center py-12 text-red-500">Error loading timetable: ' + err.message + '</td></tr>';
+      }
+    }
+
+    function renderTimetableGrid(session) {
+      const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+      const times = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"];
+
+      let html = "";
+      times.forEach((time, idx) => {
+        let row = `<tr><td class="px-6 py-4 font-bold text-gray-700 bg-gray-50 w-24">${time}</td>`;
+
+        days.forEach(day => {
+          // Simple logic: show session details if it matches the day
+          if (session.timeslot?.day_of_week === day && time === session.timeslot?.start_time) {
+            row += `<td class="px-6 py-4">
+              <div class="timetable-cell bg-blue-50 border-blue-300">
+                <p class="font-bold text-gray-800">${session.course?.code}</p>
+                <p class="text-sm text-gray-600">${session.course?.name}</p>
+                <p class="text-xs text-gray-500 mt-1">${session.instructor?.name}</p>
+                <p class="text-xs text-gray-500">${session.room?.name}</p>
+              </div>
+            </td>`;
+          } else {
+            row += `<td class="px-6 py-4"><div class="timetable-cell bg-white"></div></td>`;
+          }
+        });
+
+        row += "</tr>";
+        html += row;
+      });
+
+      document.getElementById("timetable-body").innerHTML = html;
+    }
+
+    document.getElementById("print-btn").addEventListener("click", () => {
+      window.print();
+    });
+
+    document.getElementById("export-btn").addEventListener("click", () => {
+      alert("PDF export coming soon!");
+    });
+
+    loadSessionData();
+  </script>
+</body>
+</html>
