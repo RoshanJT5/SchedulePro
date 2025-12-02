@@ -162,22 +162,51 @@
         </div>
     </div>
 </div>
+<!-- Toast Notification Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="liveToast" class="toast align-items-center text-white bg-success border-0" role="alert"
+        aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body" id="toastMessage">
+                Settings saved successfully.
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
+                aria-label="Close"></button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
     let editingBreakId = null;
+    const toastEl = document.getElementById('liveToast');
+    const toast = new bootstrap.Toast(toastEl);
+    const toastMessage = document.getElementById('toastMessage');
+    const toastContainer = document.getElementById('liveToast');
+
+    function showToast(message, type = 'success') {
+        toastMessage.textContent = message;
+        toastContainer.className = `toast align-items-center text-white bg-${type} border-0`;
+        toast.show();
+    }
 
     function savePeriodConfig() {
+        const btn = document.querySelector('#periodConfigForm button');
+        const originalText = btn.innerHTML;
         const form = document.getElementById('periodConfigForm');
         const formData = new FormData(form);
 
         const days = Array.from(document.querySelectorAll('input[name="days"]:checked')).map(cb => cb.value);
 
         if (days.length === 0) {
-            alert('Please select at least one day of the week');
+            showToast('Please select at least one day of the week', 'danger');
             return;
         }
+
+        // UX: Disable button and show spinner
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
 
         const data = {
             periods_per_day: parseInt(formData.get('periods_per_day')),
@@ -191,26 +220,37 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         })
-            .then(r => {
-                return r.json();
-            })
+            .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    alert('Period settings saved! Time slots have been regenerated.');
-                    location.reload();
+                    showToast('Period settings saved! Time slots regenerated.');
+                    // Update max period for break modal without reload
+                    const maxPeriods = parseInt(formData.get('periods_per_day'));
+                    document.getElementById('afterPeriod').max = maxPeriods;
                 } else {
-                    alert('Error: ' + (data.error || 'Failed to save settings'));
+                    showToast('Error: ' + (data.error || 'Failed to save settings'), 'danger');
                 }
             })
             .catch(err => {
                 console.error('Fetch error:', err);
-                alert('Network error: Failed to save settings. Please check your connection and try again.');
+                showToast('Network error: Failed to save settings.', 'danger');
+            })
+            .finally(() => {
+                // Reset button
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             });
     }
 
     function saveBreak() {
+        const btn = document.querySelector('#addBreakModal .modal-footer .btn-primary');
+        const originalText = btn.innerHTML;
         const form = document.getElementById('breakForm');
         const formData = new FormData(form);
+
+        // UX: Disable button and show spinner
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
 
         const data = {
             break_name: formData.get('break_name'),
@@ -231,17 +271,24 @@
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    alert('Break saved! Time slots have been regenerated.');
-                    location.reload();
+                    showToast('Break saved successfully!');
+                    // Close modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addBreakModal'));
+                    modal.hide();
+                    // Reload to update table (necessary for now)
+                    setTimeout(() => location.reload(), 1000);
                 } else {
-                    alert('Error: ' + (data.error || 'Failed to save break'));
+                    showToast('Error: ' + (data.error || 'Failed to save break'), 'danger');
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
                 }
             })
             .catch(err => {
                 console.error('Fetch error:', err);
-                alert('Network error: Failed to save break. Please check your connection and try again.');
+                showToast('Network error: Failed to save break.', 'danger');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             });
-
     }
 
     function editBreak(id, name, afterPeriod, duration) {
@@ -257,23 +304,25 @@
     }
 
     function deleteBreak(id) {
-        if (!confirm('Are you sure you want to delete this break? Time slots will be regenerated.')) return;
+        if (!confirm('Are you sure you want to delete this break?')) return;
+
+        // Find the button that triggered this (optional, but good for UX if we had reference)
+        // For now just show toast
 
         fetch(`/settings/break/${id}/delete`, { method: 'POST' })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    alert('Break deleted! Time slots have been regenerated.');
-                    location.reload();
+                    showToast('Break deleted successfully.');
+                    setTimeout(() => location.reload(), 1000);
                 } else {
-                    alert('Error deleting break');
+                    showToast('Error deleting break', 'danger');
                 }
             })
             .catch(err => {
                 console.error('Fetch error:', err);
-                alert('Network error: Failed to delete break. Please check your connection and try again.');
+                showToast('Network error: Failed to delete break.', 'danger');
             });
-
     }
 
     // Reset modal when closed
@@ -281,6 +330,11 @@
         editingBreakId = null;
         document.getElementById('breakModalTitle').textContent = 'Add Break';
         document.getElementById('breakForm').reset();
+
+        // Reset button state if it was stuck
+        const btn = document.querySelector('#addBreakModal .modal-footer .btn-primary');
+        btn.disabled = false;
+        btn.innerHTML = 'Save Break';
     });
 </script>
 {% endblock %}

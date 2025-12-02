@@ -213,7 +213,7 @@ def get_progress_steps(current_page):
 
 def generate_time_slots():
     """Generate time slots based on PeriodConfig and BreakConfig"""
-    # Clear existing time slots
+    # Clear existing time slots efficiently
     TimeSlot.query.delete()
     
     # Get period configuration
@@ -237,7 +237,8 @@ def generate_time_slots():
     start_minutes = time_to_minutes(period_config.day_start_time)
     period_duration = period_config.period_duration_minutes
     
-    current_time = start_minutes
+    # Prepare list for bulk insert
+    slots_data = []
     
     for day in days:
         current_time = start_minutes
@@ -246,14 +247,13 @@ def generate_time_slots():
             period_start = current_time
             period_end = period_start + period_duration
             
-            # Create time slot
-            slot = TimeSlot(
-                day=day,
-                period=period_num,
-                start_time=minutes_to_time(period_start),
-                end_time=minutes_to_time(period_end)
-            )
-            db.session.add(slot)
+            # Create time slot dict
+            slots_data.append({
+                'day': day,
+                'period': period_num,
+                'start_time': minutes_to_time(period_start),
+                'end_time': minutes_to_time(period_end)
+            })
             
             # Move to next period start (after this period ends)
             current_time = period_end
@@ -263,7 +263,27 @@ def generate_time_slots():
                 break_config = break_map[period_num]
                 current_time += break_config.duration_minutes
     
-    db.session.commit()
+    if slots_data:
+        # Bulk allocate IDs
+        count = len(slots_data)
+        counters = db._db['__counters__']
+        res = counters.find_one_and_update(
+            {'_id': 'timeslot'}, 
+            {'$inc': {'seq': count}}, 
+            upsert=True, 
+            return_document=True
+        )
+        end_seq = int(res['seq'])
+        start_seq = end_seq - count + 1
+        
+        # Assign IDs
+        for i, slot in enumerate(slots_data):
+            slot['id'] = start_seq + i
+            
+        # Bulk insert
+        db._db['timeslot'].insert_many(slots_data)
+        print(f"[Performance] Bulk inserted {count} time slots.")
+
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///timetable.db'
