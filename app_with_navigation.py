@@ -1771,8 +1771,16 @@ def generate_timetable():
             db.session.commit()
             
             # Generate new timetable synchronously
+            print("[GENERATE] Starting timetable generation...")
             generator = TimetableGenerator(db)
             result = generator.generate()
+            
+            print(f"[GENERATE] Generation complete. Success: {result.get('success')}")
+            print(f"[GENERATE] Entries created: {result.get('entries_created', 0)}")
+            if result.get('error'):
+                print(f"[GENERATE] Error: {result.get('error')}")
+            if result.get('warnings'):
+                print(f"[GENERATE] Warnings: {result.get('warnings')}")
             
             if result.get('success'):
                 return jsonify({
