@@ -200,6 +200,13 @@ class BaseModel(metaclass=ModelMeta):
         data = self.to_dict()
         coll.replace_one({'id': self.id}, data, upsert=True)
 
+    def save(self):
+        """
+        Save the current instance to the database.
+        """
+        # Use the global db instance
+        self._save(db._db)
+
 
 # --- Model definitions ---
 
