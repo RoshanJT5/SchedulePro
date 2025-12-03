@@ -796,6 +796,7 @@ class TimetableGenerator:
     # Persistence
     # --------------------------------------------------------------------- #
     def _persist_assignments(self, assignments, context):
+        print(f"[PERSIST] Starting to persist {len(assignments)} assignments...")
         entries_created = 0
         for assignment in assignments:
             entry = TimetableEntry(
@@ -808,5 +809,12 @@ class TimetableGenerator:
             self.db.session.add(entry)
             entries_created += 1
 
+        print(f"[PERSIST] Committing {entries_created} entries to database...")
         self.db.session.commit()
+        print(f"[PERSIST] Successfully committed {entries_created} entries!")
+        
+        # Verify entries were saved
+        saved_count = TimetableEntry.query.count()
+        print(f"[PERSIST] Verification: {saved_count} total entries in database")
+        
         return entries_created
