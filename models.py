@@ -49,6 +49,12 @@ class _Session:
         self._added.clear()
         self._deleted.clear()
 
+    def rollback(self):
+        # MongoDB doesn't support transactions in the same way as SQL
+        # Just clear the pending operations
+        self._added.clear()
+        self._deleted.clear()
+
 
 class _DB:
     def __init__(self):

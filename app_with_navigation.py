@@ -814,9 +814,12 @@ def delete_all_faculty():
         # Get all faculty user IDs for bulk user deletion
         faculty_user_ids = [f.user_id for f in Faculty.query.all() if f.user_id]
         
-        # Bulk delete linked teacher users
+        # Delete linked teacher users one by one (MongoDB doesn't support filter().in_())
         if faculty_user_ids:
-            User.query.filter(User.id.in_(faculty_user_ids), User.role == 'teacher').delete(synchronize_session=False)
+            for user_id in faculty_user_ids:
+                user = User.query.filter_by(id=user_id, role='teacher').first()
+                if user:
+                    db.session.delete(user)
         
         # Bulk delete timetable entries
         TimetableEntry.query.delete(synchronize_session=False)
