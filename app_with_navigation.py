@@ -410,6 +410,9 @@ def login():
         user = User.query.filter_by(username=username).first()
         
         if user and user.check_password(password):
+            # Save user in case password was migrated from Werkzeug to bcrypt
+            user.save()
+            
             session['user_id'] = user.id
             session['username'] = user.username
             session['role'] = user.role

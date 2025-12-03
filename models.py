@@ -221,7 +221,7 @@ class User(BaseModel):
 
     def check_password(self, password):
         """
-        Verify password against stored bcrypt hash.
+        Verify password against stored hash (supports both bcrypt and legacy Werkzeug).
         
         Args:
             password: Plaintext password to verify
@@ -230,13 +230,34 @@ class User(BaseModel):
             bool: True if password matches, False otherwise
             
         Security:
+            - Supports bcrypt (new) and Werkzeug (legacy) hashes
+            - Automatically migrates old hashes to bcrypt on successful login
             - Constant-time comparison (resistant to timing attacks)
             - Handles invalid hashes gracefully
         """
         stored_hash = getattr(self, 'password_hash', '')
         if not stored_hash:
             return False
-        return verify_password(password, stored_hash)
+        
+        # Check if it's a bcrypt hash (starts with $2b$ or $2a$ or $2y$)
+        if stored_hash.startswith('$2'):
+            # New bcrypt hash
+            is_valid = verify_password(password, stored_hash)
+            return is_valid
+        else:
+            # Legacy Werkzeug hash - import here to avoid circular dependency
+            from werkzeug.security import check_password_hash
+            
+            # Verify with Werkzeug
+            is_valid = check_password_hash(stored_hash, password)
+            
+            if is_valid:
+                # Migrate to bcrypt automatically on successful login
+                print(f"[Security] Migrating password hash for user {getattr(self, 'username', 'unknown')} to bcrypt")
+                self.set_password(password)
+                # Note: Caller should commit this change to database
+            
+            return is_valid
 
     def __repr__(self):
         return f'<User {getattr(self, "username", None)} ({getattr(self, "role", None)})>'
