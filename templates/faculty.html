@@ -236,73 +236,73 @@
                     if (data.generated_password) {
                         alert(`✓ Faculty added successfully!\n\nAuto-generated password for ${payload.username}: ${data.generated_password}\n\nPlease share this with the faculty member securely.`);
                     } else {
-                        alert('✓ Faculty added successfully!');
+                        UI.showToast('Faculty added successfully', 'success');
                     }
-                    location.reload();
+                    setTimeout(() => location.reload(), 1000);
                 } else {
-                    alert('❌ Error: ' + (data.error || 'Failed to add faculty'));
+                    UI.showToast('Error: ' + (data.error || 'Failed to add faculty'), 'error');
                 }
             })
             .catch(err => {
-                alert('❌ Network error: ' + err.message);
+                UI.showToast('Network error: ' + err.message, 'error');
             });
     }
 
     function deleteFaculty(id) {
-        if (!confirm('Are you sure you want to delete this faculty member?')) return;
-
-        fetch(`/faculty/${id}/delete`, { method: 'POST' })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert('Error deleting faculty');
-                }
-            });
+        UI.confirm('Are you sure you want to delete this faculty member?', () => {
+            fetch(`/faculty/${id}/delete`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        UI.showToast('Faculty deleted', 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        UI.showToast('Error deleting faculty', 'error');
+                    }
+                });
+        });
     }
 
     function deleteAllFaculty(event) {
         event.preventDefault();
-        
-        // Add confirmation dialog
-        if (!confirm('⚠️ Are you sure you want to delete ALL faculty members? This action cannot be undone and will also delete all associated timetable entries.')) {
-            return;
-        }
+        UI.confirm('Are you sure you want to delete ALL faculty members? This cannot be undone.', () => {
+            const btn = event.target.closest('button');
+            const originalHTML = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
 
-        const btn = event.target.closest('button');
-        const originalHTML = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
-
-        fetch('/faculty/delete-all', { 
-            method: 'POST',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    alert(`✓ Successfully deleted ${data.deleted || 'all'} faculty member(s).`);
-                    location.reload();
-                } else {
+            fetch('/faculty/delete-all', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        UI.showToast(`Deleted ${data.deleted || 'all'} faculty members`, 'success');
+                        document.querySelector('tbody').innerHTML = '<tr><td colspan="4" class="text-center text-muted">No faculty added yet. Click "Add Faculty" to get started.</td></tr>';
+                        btn.disabled = false;
+                        btn.innerHTML = originalHTML;
+                    } else {
+                        btn.disabled = false;
+                        btn.innerHTML = originalHTML;
+                        UI.showToast('Error: ' + (data.error || 'Failed to delete faculty'), 'error');
+                    }
+                })
+                .catch(err => {
                     btn.disabled = false;
                     btn.innerHTML = originalHTML;
-                    alert('❌ Error: ' + (data.error || 'Failed to delete faculty'));
-                    console.error('Error:', data.error);
-                }
-            })
-            .catch(err => {
-                btn.disabled = false;
-                btn.innerHTML = originalHTML;
-                alert('❌ Network error: ' + err.message);
-                console.error('Error:', err);
-            });
+                    UI.showToast('Network error: ' + err.message, 'error');
+                });
+        });
     }
 
 
     function importFaculty() {
         const form = document.getElementById('importFacultyForm');
         const formData = new FormData(form);
+        const modal = bootstrap.Modal.getInstance(document.getElementById('importFacultyModal'));
+        modal.hide();
+
         fetch('/faculty/import', {
             method: 'POST',
             body: formData
@@ -310,9 +310,10 @@
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    location.reload();
+                    UI.showToast('Faculty imported successfully', 'success');
+                    setTimeout(() => location.reload(), 1000);
                 } else {
-                    alert('Import failed: ' + (data.error || 'Unknown error'));
+                    UI.showToast('Import failed: ' + (data.error || 'Unknown error'), 'error');
                 }
             });
     }

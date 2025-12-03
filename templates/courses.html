@@ -215,30 +215,37 @@
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    location.reload();
+                    UI.showToast('Course added successfully', 'success');
+                    setTimeout(() => location.reload(), 1000);
                 } else {
-                    alert('Error: ' + (data.error || 'Failed to add course'));
+                    UI.showToast('Error: ' + (data.error || 'Failed to add course'), 'error');
                 }
             });
     }
 
     function deleteCourse(id) {
-        if (!confirm('Are you sure you want to delete this course?')) return;
-
-        fetch(`/courses/${id}/delete`, { method: 'POST' })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert('Error deleting course');
-                }
-            });
+        UI.confirm('Are you sure you want to delete this course?', () => {
+            fetch(`/courses/${id}/delete`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        UI.showToast('Course deleted', 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        UI.showToast('Error deleting course', 'error');
+                    }
+                });
+        });
     }
 
     function importCourses() {
         const form = document.getElementById('importCourseForm');
         const formData = new FormData(form);
+        // Modal will be closed automatically by bootstrap if we reload, 
+        // but let's hide it manually if we want to show toast first
+        const modal = bootstrap.Modal.getInstance(document.getElementById('importCourseModal'));
+        modal.hide();
+
         fetch('/courses/import', {
             method: 'POST',
             body: formData
@@ -246,38 +253,43 @@
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    location.reload();
+                    UI.showToast('Courses imported successfully', 'success');
+                    setTimeout(() => location.reload(), 1000);
                 } else {
-                    alert('Import failed: ' + (data.error || 'Unknown error'));
+                    UI.showToast('Import failed: ' + (data.error || 'Unknown error'), 'error');
                 }
             });
     }
 
     function deleteAllCourses(event) {
         event.preventDefault();
-        const btn = event.target.closest('button');
-        const originalHTML = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
+        UI.confirm('Are you sure you want to delete ALL courses? This cannot be undone.', () => {
+            const btn = event.target.closest('button');
+            const originalHTML = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
 
-        fetch('/courses/delete-all', { method: 'POST' })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
+            fetch('/courses/delete-all', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        UI.showToast(`Deleted ${data.deleted} courses`, 'success');
+                        // Remove rows from DOM immediately
+                        document.querySelector('tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted">No courses added yet. Click "Add Course" to get started.</td></tr>';
+                        btn.disabled = false;
+                        btn.innerHTML = originalHTML;
+                    } else {
+                        btn.disabled = false;
+                        btn.innerHTML = originalHTML;
+                        UI.showToast('Error: ' + data.error, 'error');
+                    }
+                })
+                .catch(err => {
                     btn.disabled = false;
                     btn.innerHTML = originalHTML;
-                    console.error('Error:', data.error);
-                }
-            })
-            .catch(err => {
-                btn.disabled = false;
-                btn.innerHTML = originalHTML;
-                console.error('Error:', err);
-            });
+                    UI.showToast('Error: ' + err, 'error');
+                });
+        });
     }
-
-
 </script>
 {% endblock %}
