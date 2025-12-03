@@ -1,0 +1,50 @@
+[Unit]
+Description=AI Timetable Generator - Gunicorn WSGI Server
+After=network.target mongodb.service
+Wants=mongodb.service
+
+[Service]
+Type=notify
+# User and group to run as (create this user on your system)
+User=www-data
+Group=www-data
+
+# Working directory
+WorkingDirectory=/var/www/ai-timetable-generator
+
+# Environment variables
+Environment="PATH=/var/www/ai-timetable-generator/venv/bin"
+EnvironmentFile=/var/www/ai-timetable-generator/.env
+
+# Gunicorn command
+ExecStart=/var/www/ai-timetable-generator/venv/bin/gunicorn \
+    -c gunicorn_config.py \
+    --worker-tmp-dir /dev/shm \
+    --log-file=/var/log/gunicorn/ai-timetable.log \
+    --access-logfile=/var/log/gunicorn/ai-timetable-access.log \
+    app_with_navigation:app
+
+# Restart policy
+Restart=always
+RestartSec=10
+KillMode=mixed
+TimeoutStopSec=30
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/ai-timetable-generator /var/log/gunicorn
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=512
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ai-timetable
+
+[Install]
+WantedBy=multi-user.target

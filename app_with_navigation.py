@@ -528,6 +528,32 @@ def download_template(entity):
         # Unsupported format
         return jsonify({'success': False, 'error': 'Unsupported format'}), 400
 
+# Health Check Endpoint (for load balancers, Docker, monitoring)
+@app.route('/health')
+def health_check():
+    """
+    Health check endpoint for monitoring and load balancers.
+    Returns 200 OK if application is healthy.
+    """
+    try:
+        # Check database connectivity
+        db._db.command('ping')
+        
+        return jsonify({
+            'status': 'healthy',
+            'service': 'AI Timetable Generator',
+            'database': 'connected',
+            'timestamp': datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'service': 'AI Timetable Generator',
+            'database': 'disconnected',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 503
+
 @app.route('/')
 @login_required
 def index():
