@@ -10,7 +10,7 @@ import secrets
 import math
 import os
 
-import pandas as pd
+from csv_processor import process_upload_stream, get_missing_columns
 from pymongo.errors import DuplicateKeyError as IntegrityError
 import warnings
 from dotenv import load_dotenv
@@ -142,31 +142,18 @@ def create_faculty_profile(payload):
     db.session.add(faculty)
     return faculty, generated_password
 
-def load_dataframe_from_upload(upload_file):
-    filename = upload_file.filename.lower()
-    if filename.endswith('.csv'):
-        return pd.read_csv(upload_file)
-    if filename.endswith('.xlsx') or filename.endswith('.xls'):
-        return pd.read_excel(upload_file)
-    raise ValueError('Unsupported file type. Upload CSV or Excel.')
-
 def parse_int(value, default=0):
     try:
-        if value is None or (isinstance(value, float) and math.isnan(value)):
-            return default
-        return int(float(value))
+        return int(value) if value not in (None, '', 'nan') else default
     except (TypeError, ValueError):
         return default
 
 def normalize_comma_list(value):
-    if value is None:
+    if not value or value == 'nan':
         return []
-    if isinstance(value, str):
-        return [item.strip() for item in value.split(',') if item.strip()]
-    if isinstance(value, (list, tuple, set)):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text_value = str(value).strip()
-    return [text_value] if text_value else []
+    if isinstance(value, list):
+        return value
+    return [item.strip() for item in str(value).split(',') if item.strip()]
 
 
 # Navigation flow for guided setup
@@ -596,65 +583,83 @@ def import_courses():
     upload = request.files.get('file')
     if not upload:
         return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+    
     try:
-        df = load_dataframe_from_upload(upload)
+        # Validate file type and get streaming processor
+        chunks_generator = process_upload_stream(upload, chunk_size=1000)
+        
+        # Validate required columns from first chunk
+        first_chunk = None
+        required_columns = {'code', 'name', 'credits', 'hours_per_week'}
+        
+        created, updated = 0, 0
+        
+        for chunk_idx, chunk in enumerate(chunks_generator):
+            # Validate columns on first chunk
+            if chunk_idx == 0 and chunk:
+                available_columns = set(chunk[0].keys())
+                missing = get_missing_columns(available_columns, required_columns)
+                if missing:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Missing columns: {", ".join(sorted(missing))}'
+                    }), 400
+            
+            # Process chunk
+            for row in chunk:
+                code = str(row.get('code', '')).strip()
+                if not code:
+                    continue
+                
+                course = Course.query.filter_by(code=code).first()
+                course_type = str(row.get('course_type', row.get('type', 'theory'))).lower()
+                course_type = 'practical' if 'prac' in course_type else 'theory'
+                branch = str(row.get('branch', '')).strip() or None
+                tags_raw = row.get('required_room_tags') or row.get('room_tags') or ''
+                tags = ','.join(tag.strip() for tag in str(tags_raw).split(',') if tag.strip())
+
+                payload = {
+                    'code': code,
+                    'name': str(row.get('name', code)).strip(),
+                    'credits': parse_int(row.get('credits'), 0),
+                    'course_type': course_type,
+                    'hours_per_week': parse_int(row.get('hours_per_week'), 1),
+                    'branch': branch,
+                    'required_room_tags': tags
+                }
+
+                if course:
+                    course.name = payload['name']
+                    course.credits = payload['credits']
+                    course.course_type = payload['course_type']
+                    course.hours_per_week = payload['hours_per_week']
+                    course.branch = payload['branch']
+                    course.required_room_tags = payload['required_room_tags']
+                    updated += 1
+                else:
+                    course = Course(
+                        code=payload['code'],
+                        name=payload['name'],
+                        credits=payload['credits'],
+                        course_type=payload['course_type'],
+                        hours_per_week=payload['hours_per_week'],
+                        branch=payload['branch'],
+                        required_room_tags=payload['required_room_tags']
+                    )
+                    db.session.add(course)
+                    created += 1
+            
+            # Commit after each chunk for better memory management
+            db.session.commit()
+        
+        return jsonify({'success': True, 'created': created, 'updated': updated})
+    
     except ValueError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Import failed: {str(exc)}'}), 500
 
-    df.columns = [col.strip().lower() for col in df.columns]
-    required_columns = {'code', 'name', 'credits', 'hours_per_week'}
-    if not required_columns.issubset(set(df.columns)):
-        return jsonify({
-            'success': False,
-            'error': f'Missing columns. Required: {", ".join(sorted(required_columns))}'
-        }), 400
-
-    created, updated = 0, 0
-    for _, row in df.iterrows():
-        row_data = row.to_dict()
-        code = str(row_data.get('code', '')).strip()
-        if not code:
-            continue
-        course = Course.query.filter_by(code=code).first()
-        course_type = str(row_data.get('course_type', row_data.get('type', 'theory'))).lower()
-        course_type = 'practical' if 'prac' in course_type else 'theory'
-        branch = str(row_data.get('branch', '')).strip() or None
-        tags_raw = row_data.get('required_room_tags') or row_data.get('room_tags') or ''
-        tags = ','.join(tag.strip() for tag in str(tags_raw).split(',') if tag.strip())
-
-        payload = {
-            'code': code,
-            'name': str(row_data.get('name', code)).strip(),
-            'credits': parse_int(row_data.get('credits'), 0),
-            'course_type': course_type,
-            'hours_per_week': parse_int(row_data.get('hours_per_week'), 1),
-            'branch': branch,
-            'required_room_tags': tags
-        }
-
-        if course:
-            course.name = payload['name']
-            course.credits = payload['credits']
-            course.course_type = payload['course_type']
-            course.hours_per_week = payload['hours_per_week']
-            course.branch = payload['branch']
-            course.required_room_tags = payload['required_room_tags']
-            updated += 1
-        else:
-            course = Course(
-                code=payload['code'],
-                name=payload['name'],
-                credits=payload['credits'],
-                course_type=payload['course_type'],
-                hours_per_week=payload['hours_per_week'],
-                branch=payload['branch'],
-                required_room_tags=payload['required_room_tags']
-            )
-            db.session.add(course)
-            created += 1
-
-    db.session.commit()
-    return jsonify({'success': True, 'created': created, 'updated': updated})
 
 @app.route('/courses/delete-all', methods=['POST'])
 @admin_required
@@ -747,61 +752,75 @@ def import_faculty():
     upload = request.files.get('file')
     if not upload:
         return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+    
     try:
-        df = load_dataframe_from_upload(upload)
+        chunks_generator = process_upload_stream(upload, chunk_size=1000)
+        required = {'name', 'username'}
+        
+        created = 0
+        updated = 0
+        
+        for chunk_idx, chunk in enumerate(chunks_generator):
+            # Validate columns on first chunk
+            if chunk_idx == 0 and chunk:
+                available_columns = set(chunk[0].keys())
+                missing = get_missing_columns(available_columns, required)
+                if missing:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Missing columns: {", ".join(sorted(missing))}'
+                    }), 400
+            
+            for row in chunk:
+                name = str(row.get('name', '')).strip()
+                if not name:
+                    continue
+                username = str(row.get('username', '')).strip()
+                email = str(row.get('email', '')).strip()
+                expertise = normalize_comma_list(row.get('expertise', ''))
+                min_hours = parse_int(row.get('min_hours_per_week'), 4)
+                max_hours = parse_int(row.get('max_hours_per_week'), 16)
+
+                raw_availability = row.get('availability', '{}')
+                if isinstance(raw_availability, (dict, list)):
+                    raw_availability = json.dumps(raw_availability)
+                elif not isinstance(raw_availability, str):
+                    raw_availability = '{}'
+                payload = {
+                    'name': name,
+                    'email': email,
+                    'expertise': expertise,
+                    'username': username,
+                    'password': str(row.get('password', '')).strip(),
+                    'min_hours_per_week': min_hours,
+                    'max_hours_per_week': max_hours,
+                    'availability': raw_availability
+                }
+                faculty = Faculty.query.filter_by(username=username).first()
+                if faculty:
+                    faculty.name = name
+                    faculty.email = email
+                    faculty.expertise = ','.join(expertise)
+                    faculty.min_hours_per_week = min_hours
+                    faculty.max_hours_per_week = max_hours
+                    faculty.availability = payload.get('availability', '{}')
+                    updated += 1
+                    continue
+
+                create_faculty_profile(payload)
+                created += 1
+            
+            # Commit after each chunk
+            db.session.commit()
+        
+        return jsonify({'success': True, 'created': created, 'updated': updated})
+    
     except ValueError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Import failed: {str(exc)}'}), 500
 
-    df.columns = [col.strip().lower() for col in df.columns]
-    required = {'name', 'username'}
-    if not required.issubset(set(df.columns)):
-        return jsonify({'success': False, 'error': f'Missing columns: {", ".join(sorted(required))}'}), 400
-
-    created = 0
-    updated = 0
-    for _, row in df.iterrows():
-        row_data = row.to_dict()
-        name = str(row_data.get('name', '')).strip()
-        if not name:
-            continue
-        username = str(row_data.get('username', '')).strip()
-        email = str(row_data.get('email', '')).strip()
-        expertise = normalize_comma_list(row_data.get('expertise', ''))
-        min_hours = parse_int(row_data.get('min_hours_per_week'), 4)
-        max_hours = parse_int(row_data.get('max_hours_per_week'), 16)
-
-        raw_availability = row_data.get('availability', '{}')
-        if isinstance(raw_availability, (dict, list)):
-            raw_availability = json.dumps(raw_availability)
-        elif not isinstance(raw_availability, str):
-            raw_availability = '{}'
-        payload = {
-            'name': name,
-            'email': email,
-            'expertise': expertise,
-            'username': username,
-            'password': str(row_data.get('password', '')).strip(),
-            'min_hours_per_week': min_hours,
-            'max_hours_per_week': max_hours,
-            'availability': raw_availability
-        }
-        faculty = Faculty.query.filter_by(username=username).first()
-        if faculty:
-            faculty.name = name
-            faculty.email = email
-            faculty.expertise = ','.join(expertise)
-            faculty.min_hours_per_week = min_hours
-            faculty.max_hours_per_week = max_hours
-            # Admin import: accept provided availability (or default to '{}')
-            faculty.availability = payload.get('availability', '{}')
-            updated += 1
-            continue
-
-        create_faculty_profile(payload)
-        created += 1
-
-    db.session.commit()
-    return jsonify({'success': True, 'created': created, 'updated': updated})
 
 @app.route('/faculty/delete-all', methods=['POST'])
 @admin_required
@@ -892,62 +911,68 @@ def import_rooms():
     upload = request.files.get('file')
     if not upload:
         return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+    
     try:
-        df = load_dataframe_from_upload(upload)
+        chunks_generator = process_upload_stream(upload, chunk_size=1000)
+        required_columns = {'name', 'capacity'}
+        
+        created, updated = 0, 0
+        
+        for chunk_idx, chunk in enumerate(chunks_generator):
+            if chunk_idx == 0 and chunk:
+                available_columns = set(chunk[0].keys())
+                missing = get_missing_columns(available_columns, required_columns)
+                if missing:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Missing columns: {", ".join(sorted(missing))}'
+                    }), 400
+            
+            for row in chunk:
+                name = str(row.get('name', '')).strip()
+                if not name:
+                    continue
+                room = Room.query.filter_by(name=name).first()
+                capacity = parse_int(row.get('capacity'), 0)
+                room_type = str(row.get('room_type', 'classroom')).strip()
+                equipment = str(row.get('equipment', '')).strip()
+                tags = ','.join(tag.strip() for tag in str(row.get('tags', '')).split(',') if tag.strip())
+
+                payload = {
+                    'name': name,
+                    'capacity': capacity,
+                    'room_type': room_type,
+                    'equipment': equipment,
+                    'tags': tags
+                }
+
+                if room:
+                    room.name = payload['name']
+                    room.capacity = payload['capacity']
+                    room.room_type = payload['room_type']
+                    room.equipment = payload['equipment']
+                    room.tags = payload['tags']
+                    updated += 1
+                else:
+                    room = Room(
+                        name=payload['name'],
+                        capacity=payload['capacity'],
+                        room_type=payload['room_type'],
+                        equipment=payload['equipment'],
+                        tags=payload['tags']
+                    )
+                    db.session.add(room)
+                    created += 1
+            
+            db.session.commit()
+        
+        return jsonify({'success': True, 'created': created, 'updated': updated})
+    
     except ValueError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
-
-    df.columns = [col.strip().lower() for col in df.columns]
-    required_columns = {'name', 'capacity'}
-    if not required_columns.issubset(set(df.columns)):
-        return jsonify({
-            'success': False,
-            'error': f'Missing columns. Required: {", ".join(sorted(required_columns))}'
-        }), 400
-
-    created, updated = 0, 0
-    for _, row in df.iterrows():
-        row_data = row.to_dict()
-        name = str(row_data.get('name', '')).strip()
-        if not name:
-            continue
-        room = Room.query.filter_by(name=name).first()
-        try:
-            capacity = int(row_data.get('capacity', 0)) if row_data.get('capacity') not in (None, '') else 0
-        except (TypeError, ValueError):
-            capacity = 0
-        room_type = str(row_data.get('room_type', 'classroom')).strip()
-        equipment = str(row_data.get('equipment', '')).strip()
-        tags = ','.join(tag.strip() for tag in str(row_data.get('tags', '')).split(',') if tag.strip())
-
-        payload = {
-            'name': name,
-            'capacity': capacity,
-            'room_type': room_type,
-            'equipment': equipment,
-            'tags': tags
-        }
-
-        if room:
-            room.name = payload['name']
-            room.capacity = payload['capacity']
-            room.room_type = payload['room_type']
-            room.equipment = payload['equipment']
-            room.tags = payload['tags']
-            updated += 1
-        else:
-            room = Room(
-                name=payload['name'],
-                capacity=payload['capacity'],
-                room_type=payload['room_type'],
-                equipment=payload['equipment'],
-                tags=payload['tags']
-            )
-            db.session.add(room)
-            created += 1
-
-    db.session.commit()
-    return jsonify({'success': True, 'created': created, 'updated': updated})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Import failed: {str(exc)}'}), 500
 
 @app.route('/rooms/delete-all', methods=['POST'])
 @admin_required
