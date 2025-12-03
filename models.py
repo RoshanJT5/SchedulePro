@@ -1,4 +1,4 @@
-from pymongo import MongoClient, ASCENDING
+from pymongo import MongoClient, ASCENDING, ReplaceOne, DeleteOne
 from bson.objectid import ObjectId
 from typing import Any, Dict, List
 from flask import abort
@@ -20,25 +20,48 @@ class _Session:
         self._deleted.append(obj)
 
     def flush(self):
-        # First process deletions recorded by db.session.delete(obj)
+        ops = {}  # {collection_name: [operations]}
+
+        # Process deletions
         for obj in list(self._deleted):
             try:
-                coll = self._db[_get_collection_name(obj.__class__)]
+                coll_name = _get_collection_name(obj.__class__)
+                if coll_name not in ops:
+                    ops[coll_name] = []
+                
                 obj_id = getattr(obj, 'id', None)
                 if obj_id is not None:
-                    coll.delete_one({'id': obj_id})
+                    ops[coll_name].append(DeleteOne({'id': obj_id}))
+                elif hasattr(obj, '_id'):
+                    ops[coll_name].append(DeleteOne({'_id': obj._id}))
                 else:
-                    # If no integer id, try to remove by _id or by matching dict
-                    if hasattr(obj, '_id'):
-                        coll.delete_one({'_id': obj._id})
-                    else:
-                        coll.delete_many(obj.to_dict())
+                    # Fallback for dict-based delete (cannot be bulked easily if filter is complex)
+                    # Execute immediately
+                    self._db[coll_name].delete_many(obj.to_dict())
             except Exception:
                 pass
 
-        # write added objects to DB and assign integer id if model uses 'id'
+        # Process additions/updates
         for obj in list(self._added):
-            obj._save(self._db)
+            coll_name = _get_collection_name(obj.__class__)
+            if coll_name not in ops:
+                ops[coll_name] = []
+            
+            # Ensure integer id sequence
+            if getattr(obj, 'id', None) is None:
+                obj.id = get_next_id(self._db, coll_name)
+            
+            data = obj.to_dict()
+            ops[coll_name].append(ReplaceOne({'id': obj.id}, data, upsert=True))
+
+        # Execute bulk writes
+        for coll_name, operations in ops.items():
+            if operations:
+                try:
+                    # ordered=False continues processing even if one fails
+                    self._db[coll_name].bulk_write(operations, ordered=False)
+                except Exception as e:
+                    print(f"[MongoDB] Bulk write error in {coll_name}: {e}")
 
     def commit(self):
         # for simplicity, flush does the persistence
@@ -101,7 +124,7 @@ def _get_collection_name(cls):
     return cls.__name__.lower()
 
 
-def _get_next_id(db, name: str) -> int:
+def get_next_id(db, name: str) -> int:
     counters = db['__counters__']
     res = counters.find_one_and_update({'_id': name}, {'$inc': {'seq': 1}}, upsert=True, return_document=True)
     return int(res['seq'])
@@ -215,7 +238,7 @@ class BaseModel(metaclass=ModelMeta):
         coll = mongo_db[_get_collection_name(self.__class__)]
         # ensure integer id sequence
         if getattr(self, 'id', None) is None:
-            self.id = _get_next_id(mongo_db, _get_collection_name(self.__class__))
+            self.id = get_next_id(mongo_db, _get_collection_name(self.__class__))
         data = self.to_dict()
         coll.replace_one({'id': self.id}, data, upsert=True)
 

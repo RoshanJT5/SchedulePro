@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 from celery import Celery
 from cache import cache_response, invalidate_cache
 from auth_jwt import create_tokens, decode_token, revoke_token, is_token_revoked
-from models import db, Course, Faculty, Room, Student, TimeSlot, TimetableEntry, User, PeriodConfig, BreakConfig, StudentGroup
+from models import db, Course, Faculty, Room, Student, TimeSlot, TimetableEntry, User, PeriodConfig, BreakConfig, StudentGroup, get_next_id
 from scheduler import TimetableGenerator
 from functools import wraps
 import time
@@ -779,6 +779,9 @@ def import_courses():
         first_chunk = None
         required_columns = {'code', 'name', 'credits', 'hours_per_week'}
         
+        # Pre-fetch existing courses to avoid N+1 queries
+        existing_courses = {c.code: c for c in Course.query.all()}
+        
         created, updated = 0, 0
         
         for chunk_idx, chunk in enumerate(chunks_generator):
@@ -798,7 +801,7 @@ def import_courses():
                 if not code:
                     continue
                 
-                course = Course.query.filter_by(code=code).first()
+                course = existing_courses.get(code)
                 course_type = str(row.get('course_type', row.get('type', 'theory'))).lower()
                 course_type = 'practical' if 'prac' in course_type else 'theory'
                 branch = str(row.get('branch', '')).strip() or None
@@ -823,6 +826,7 @@ def import_courses():
                     course.branch = payload['branch']
                     course.required_room_tags = payload['required_room_tags']
                     updated += 1
+                    db.session.add(course)
                 else:
                     course = Course(
                         code=payload['code'],
@@ -833,6 +837,7 @@ def import_courses():
                         branch=payload['branch'],
                         required_room_tags=payload['required_room_tags']
                     )
+                    existing_courses[code] = course
                     db.session.add(course)
                     created += 1
             
@@ -944,6 +949,9 @@ def import_faculty():
         chunks_generator = process_upload_stream(upload, chunk_size=1000)
         required = {'name', 'username'}
         
+        # Pre-fetch existing faculty to avoid N+1 queries
+        existing_faculty = {f.username: f for f in Faculty.query.all()}
+        
         created = 0
         updated = 0
         
@@ -983,7 +991,8 @@ def import_faculty():
                     'max_hours_per_week': max_hours,
                     'availability': raw_availability
                 }
-                faculty = Faculty.query.filter_by(username=username).first()
+                
+                faculty = existing_faculty.get(username)
                 if faculty:
                     faculty.name = name
                     faculty.email = email
@@ -992,9 +1001,11 @@ def import_faculty():
                     faculty.max_hours_per_week = max_hours
                     faculty.availability = payload.get('availability', '{}')
                     updated += 1
+                    db.session.add(faculty)
                     continue
 
-                create_faculty_profile(payload)
+                new_fac, _ = create_faculty_profile(payload)
+                existing_faculty[username] = new_fac
                 created += 1
             
             # Commit after each chunk
@@ -1103,6 +1114,9 @@ def import_rooms():
         chunks_generator = process_upload_stream(upload, chunk_size=1000)
         required_columns = {'name', 'capacity'}
         
+        # Pre-fetch existing rooms to avoid N+1 queries
+        existing_rooms = {r.name: r for r in Room.query.all()}
+        
         created, updated = 0, 0
         
         for chunk_idx, chunk in enumerate(chunks_generator):
@@ -1119,7 +1133,8 @@ def import_rooms():
                 name = str(row.get('name', '')).strip()
                 if not name:
                     continue
-                room = Room.query.filter_by(name=name).first()
+                
+                room = existing_rooms.get(name)
                 capacity = parse_int(row.get('capacity'), 0)
                 room_type = str(row.get('room_type', 'classroom')).strip()
                 equipment = str(row.get('equipment', '')).strip()
@@ -1140,6 +1155,7 @@ def import_rooms():
                     room.equipment = payload['equipment']
                     room.tags = payload['tags']
                     updated += 1
+                    db.session.add(room)
                 else:
                     room = Room(
                         name=payload['name'],
@@ -1148,6 +1164,7 @@ def import_rooms():
                         equipment=payload['equipment'],
                         tags=payload['tags']
                     )
+                    existing_rooms[name] = room
                     db.session.add(room)
                     created += 1
             
@@ -1263,97 +1280,94 @@ def import_students():
     upload = request.files.get('file')
     if not upload:
         return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+    
     try:
-        df = load_dataframe_from_upload(upload)
+        chunks_generator = process_upload_stream(upload, chunk_size=1000)
+        required = {'student_id', 'name'}
+        
+        # Pre-fetch
+        existing_students = {s.student_id: s for s in Student.query.all()}
+        existing_users = {u.username: u for u in User.query.all()}
+        
+        created, updated = 0, 0
+        
+        for chunk_idx, chunk in enumerate(chunks_generator):
+            if chunk_idx == 0 and chunk:
+                available_columns = set(chunk[0].keys())
+                missing = get_missing_columns(available_columns, required)
+                if missing:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Missing columns: {", ".join(sorted(missing))}'
+                    }), 400
+            
+            for row in chunk:
+                student_id = str(row.get('student_id', '')).strip()
+                if not student_id: continue
+                
+                name = str(row.get('name', '')).strip()
+                enrolled_courses = str(row.get('enrolled_courses', '')).strip()
+                username = str(row.get('username', '')).strip()
+                password = str(row.get('password', '')).strip()
+                
+                student = existing_students.get(student_id)
+                
+                # User logic
+                user_id = None
+                if username:
+                    u = existing_users.get(username)
+                    if u:
+                        if u.role != 'student':
+                            u.role = 'student'
+                        u.name = name
+                        if password:
+                            u.set_password(password)
+                        db.session.add(u)
+                        user_id = u.id
+                    else:
+                        email = f"{username}@student.local"
+                        u = User(username=username, email=email, role='student', name=name)
+                        if password:
+                            u.set_password(password)
+                        else:
+                            u.set_password(secrets.token_urlsafe(8))
+                        
+                        # Generate ID manually for linking
+                        u.id = get_next_id(db._db, 'user')
+                        
+                        existing_users[username] = u
+                        db.session.add(u)
+                        user_id = u.id
+                
+                if student:
+                    student.name = name
+                    student.enrolled_courses = enrolled_courses
+                    if username:
+                        student.username = username
+                        student.user_id = user_id
+                    updated += 1
+                    db.session.add(student)
+                else:
+                    student = Student(
+                        student_id=student_id,
+                        name=name,
+                        enrolled_courses=enrolled_courses,
+                        username=username or None,
+                        user_id=user_id
+                    )
+                    existing_students[student_id] = student
+                    db.session.add(student)
+                    created += 1
+            
+            db.session.commit()
+            
+        return jsonify({'success': True, 'created': created, 'updated': updated})
+
     except ValueError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
-
-    df.columns = [col.strip().lower() for col in df.columns]
-    required_columns = {'student_id', 'name'}
-    if not required_columns.issubset(set(df.columns)):
-        return jsonify({
-            'success': False,
-            'error': f'Missing columns. Required: {", ".join(sorted(required_columns))}'
-        }), 400
-
-    created, updated = 0, 0
-    for _, row in df.iterrows():
-        row_data = row.to_dict()
-        student_id = str(row_data.get('student_id', '')).strip()
-        if not student_id:
-            continue
-        name = str(row_data.get('name', '')).strip()
-        enrolled_courses = str(row_data.get('enrolled_courses', '')).strip()
-        username = str(row_data.get('username', '')).strip()
-        password = str(row_data.get('password', '')).strip()
-        student = Student.query.filter_by(student_id=student_id).first()
-
-        if student:
-            student.name = name
-            student.enrolled_courses = enrolled_courses
-            # Link or create user if username provided
-            if username:
-                # Update or create user
-                linked_user = None
-                if getattr(student, 'user_id', None):
-                    linked_user = User.query.get(student.user_id)
-                if linked_user and linked_user.username != username:
-                    # Username changed: if old user was a student, keep it or reassign
-                    pass
-                u = User.query.filter_by(username=username).first()
-                if u:
-                    if u.role != 'student':
-                        u.role = 'student'
-                    u.name = name
-                    if password:
-                        u.set_password(password)
-                else:
-                    email = f"{username}@student.local"
-                    if User.query.filter_by(email=email).first():
-                        email = f"{username}+{secrets.token_hex(3)}@student.local"
-                    u = User(username=username, email=email, role='student', name=name)
-                    if password:
-                        u.set_password(password)
-                    else:
-                        u.set_password(secrets.token_urlsafe(8))
-                    db.session.add(u)
-                    db.session.flush()
-                student.username = username
-                student.user_id = getattr(u, 'id', None)
-            updated += 1
-        else:
-            student = Student(
-                student_id=student_id,
-                name=name,
-                enrolled_courses=enrolled_courses
-            )
-            # Create/link user for new student
-            if username:
-                u = User.query.filter_by(username=username).first()
-                if u:
-                    if u.role != 'student':
-                        u.role = 'student'
-                    u.name = name
-                    if password:
-                        u.set_password(password)
-                else:
-                    email = f"{username}@student.local"
-                    if User.query.filter_by(email=email).first():
-                        email = f"{username}+{secrets.token_hex(3)}@student.local"
-                    u = User(username=username, email=email, role='student', name=name)
-                    if password:
-                        u.set_password(password)
-                    else:
-                        u.set_password(secrets.token_urlsafe(8))
-                    db.session.add(u)
-                    db.session.flush()
-                student.username = username
-                student.user_id = getattr(u, 'id', None)
-            db.session.add(student)
-            created += 1
-
-    db.session.commit()
-    return jsonify({'success': True, 'created': created, 'updated': updated})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Import failed: {str(exc)}'}), 500
 
 @app.route('/students/delete-all', methods=['POST'])
 @admin_required
@@ -1462,65 +1476,73 @@ def import_student_groups():
     upload = request.files.get('file')
     if not upload:
         return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+    
     try:
-        df = load_dataframe_from_upload(upload)
+        chunks_generator = process_upload_stream(upload, chunk_size=1000)
+        required = {'name'}
+        
+        existing_groups = {g.name: g for g in StudentGroup.query.all()}
+        
+        created, updated = 0, 0
+        
+        for chunk_idx, chunk in enumerate(chunks_generator):
+            if chunk_idx == 0 and chunk:
+                available_columns = set(chunk[0].keys())
+                missing = get_missing_columns(available_columns, required)
+                if missing:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Missing columns: {", ".join(sorted(missing))}'
+                    }), 400
+            
+            for row in chunk:
+                name = str(row.get('name', '')).strip()
+                if not name: continue
+                
+                description = str(row.get('description', '')).strip()
+                total_students = parse_int(row.get('total_students'), None)
+                
+                # Parse batches
+                batches = []
+                batches_col = row.get('batches', '')
+                batches_students_col = row.get('batches_students', '')
+                if batches_col or batches_students_col:
+                    batch_names = [b.strip() for b in str(batches_col).split(',') if b.strip()]
+                    batch_students = [s.strip() for s in str(batches_students_col).split(',') if s.strip()]
+                    for i, batch_name in enumerate(batch_names):
+                        students = batch_students[i] if i < len(batch_students) else ''
+                        batches.append({'batch_name': batch_name, 'students': students})
+                batches_json = json.dumps(batches) if batches else None
+                
+                group = existing_groups.get(name)
+                if group:
+                    group.name = name
+                    group.description = description
+                    group.total_students = total_students
+                    if batches_json:
+                        group.batches = batches_json
+                    updated += 1
+                    db.session.add(group)
+                else:
+                    group = StudentGroup(
+                        name=name,
+                        description=description,
+                        total_students=total_students,
+                        batches=batches_json
+                    )
+                    existing_groups[name] = group
+                    db.session.add(group)
+                    created += 1
+            
+            db.session.commit()
+            
+        return jsonify({'success': True, 'created': created, 'updated': updated})
+
     except ValueError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
-
-    df.columns = [col.strip().lower() for col in df.columns]
-    required_columns = {'name'}
-    if not required_columns.issubset(set(df.columns)):
-        return jsonify({
-            'success': False,
-            'error': f'Missing columns. Required: {", ".join(sorted(required_columns))}'
-        }), 400
-
-    created, updated = 0, 0
-    for _, row in df.iterrows():
-        row_data = row.to_dict()
-        name = str(row_data.get('name', '')).strip()
-        if not name:
-            continue
-        description = str(row_data.get('description', '')).strip()
-        total_students = None
-        try:
-            total_students = int(row_data.get('total_students')) if row_data.get('total_students') not in (None, '') else None
-        except (TypeError, ValueError):
-            total_students = None
-
-        # Parse batches and batches_students columns if present
-        batches = []
-        batches_col = row_data.get('batches', '')
-        batches_students_col = row_data.get('batches_students', '')
-        if batches_col or batches_students_col:
-            # Split by comma, pair up if both present
-            batch_names = [b.strip() for b in str(batches_col).split(',') if b.strip()]
-            batch_students = [s.strip() for s in str(batches_students_col).split(',') if s.strip()]
-            for i, batch_name in enumerate(batch_names):
-                students = batch_students[i] if i < len(batch_students) else ''
-                batches.append({'batch_name': batch_name, 'students': students})
-        batches_json = json.dumps(batches) if batches else None
-
-        group = StudentGroup.query.filter_by(name=name).first()
-        if group:
-            group.name = name
-            group.description = description
-            group.total_students = total_students
-            if batches_json:
-                group.batches = batches_json
-            updated += 1
-        else:
-            group = StudentGroup(
-                name=name,
-                description=description,
-                total_students=total_students,
-                batches=batches_json
-            )
-            db.session.add(group)
-            created += 1
-
-    db.session.commit()
-    return jsonify({'success': True, 'created': created, 'updated': updated})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Import failed: {str(exc)}'}), 500
 
 @app.route('/student-groups/delete-all', methods=['POST'])
 @admin_required
