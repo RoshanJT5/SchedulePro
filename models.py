@@ -1,13 +1,10 @@
 from pymongo import MongoClient, ASCENDING
-from werkzeug.security import generate_password_hash, check_password_hash
 from bson.objectid import ObjectId
 from typing import Any, Dict, List
 from flask import abort
 
-from pymongo import MongoClient, ASCENDING
-from werkzeug.security import generate_password_hash, check_password_hash
-from bson.objectid import ObjectId
-from typing import Any, Dict, List
+# Import secure bcrypt-based password hashing
+from password_security import hash_password, verify_password
 
 
 class _Session:
@@ -209,10 +206,37 @@ class BaseModel(metaclass=ModelMeta):
 
 class User(BaseModel):
     def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+        """
+        Hash and store password using bcrypt with 12 rounds.
+        
+        Args:
+            password: Plaintext password to hash
+            
+        Security:
+            - Uses bcrypt with 12 rounds (2^12 = 4096 iterations)
+            - Automatically generates unique salt per password
+            - Resistant to rainbow table and brute force attacks
+        """
+        self.password_hash = hash_password(password)
 
     def check_password(self, password):
-        return check_password_hash(getattr(self, 'password_hash', ''), password)
+        """
+        Verify password against stored bcrypt hash.
+        
+        Args:
+            password: Plaintext password to verify
+            
+        Returns:
+            bool: True if password matches, False otherwise
+            
+        Security:
+            - Constant-time comparison (resistant to timing attacks)
+            - Handles invalid hashes gracefully
+        """
+        stored_hash = getattr(self, 'password_hash', '')
+        if not stored_hash:
+            return False
+        return verify_password(password, stored_hash)
 
     def __repr__(self):
         return f'<User {getattr(self, "username", None)} ({getattr(self, "role", None)})>'
