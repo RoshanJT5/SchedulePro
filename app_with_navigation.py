@@ -5,6 +5,8 @@ from auth_jwt import create_tokens, decode_token, revoke_token, is_token_revoked
 from models import db, Course, Faculty, Room, Student, TimeSlot, TimetableEntry, User, PeriodConfig, BreakConfig, StudentGroup
 from scheduler import TimetableGenerator
 from functools import wraps
+import time
+from pyinstrument import Profiler
 import csv
 import io
 from datetime import datetime
@@ -298,6 +300,34 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MONGO_URI'] = os.getenv('MONGO_URI')
 app.config['MONGO_DBNAME'] = os.getenv('MONGO_DBNAME', 'timetable')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret-key')
+
+# Profiling Middleware
+@app.before_request
+def before_request():
+    request._start_time = time.time()
+    
+    if 'profile' in request.args:
+        g.profiler = Profiler()
+        g.profiler.start()
+
+@app.after_request
+def after_request(response):
+    # Timing Log
+    if hasattr(request, '_start_time'):
+        elapsed = time.time() - request._start_time
+        # Log to console/file
+        app.logger.info(f"[{request.remote_addr}] {request.method} {request.path} {elapsed:.3f}s")
+        
+        # Add header
+        response.headers["X-Response-Time"] = f"{elapsed:.3f}s"
+
+    # Profiler Report
+    if hasattr(g, 'profiler'):
+        g.profiler.stop()
+        output_html = g.profiler.output_html()
+        return make_response(output_html)
+        
+    return response
 
 # Celery Configuration
 app.config['CELERY_BROKER_URL'] = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
