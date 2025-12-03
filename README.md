@@ -12,7 +12,7 @@ A powerful, AI-driven full-stack application for automated academic timetable ge
 - **Excel/CSV Import**: Bulk import support for courses, faculty, rooms, and students.
 - **Interactive Dashboard**: Modern UI with real-time statistics and management tools.
 - **Cloud Database**: Scalable data storage with MongoDB Atlas.
-- **Serverless Deployment**: Optimized for Vercel serverless architecture.
+- **Serverless Deployment**: Optimized for Vercel serverless architecture (with synchronous fallback).
 
 ## 🛠️ Tech Stack
 
