@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, session, flash, abort
+from celery import Celery
 from models import db, Course, Faculty, Room, Student, TimeSlot, TimetableEntry, User, PeriodConfig, BreakConfig, StudentGroup
 from scheduler import TimetableGenerator
 from functools import wraps
@@ -272,6 +273,22 @@ def generate_time_slots():
         print(f"[Performance] Bulk inserted {count} time slots.")
 
 
+def make_celery(app):
+    celery = Celery(
+        app.import_name,
+        backend=app.config.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
+        broker=app.config.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+    )
+    celery.conf.update(app.config)
+
+    class ContextTask(celery.Task):
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
+
+    celery.Task = ContextTask
+    return celery
+
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///timetable.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -279,6 +296,32 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MONGO_URI'] = os.getenv('MONGO_URI')
 app.config['MONGO_DBNAME'] = os.getenv('MONGO_DBNAME', 'timetable')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret-key')
+
+# Celery Configuration
+app.config['CELERY_BROKER_URL'] = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+app.config['CELERY_RESULT_BACKEND'] = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+
+celery = make_celery(app)
+
+@celery.task(bind=True)
+def generate_timetable_task(self):
+    """Background task to generate timetable"""
+    try:
+        self.update_state(state='PROGRESS', meta={'status': 'Initializing generation...'})
+        
+        # Clear existing timetable
+        TimetableEntry.query.delete()
+        db.session.commit()
+        
+        self.update_state(state='PROGRESS', meta={'status': 'Running algorithm...'})
+        
+        # Generate new timetable
+        generator = TimetableGenerator(db)
+        result = generator.generate()
+        
+        return result
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
 # Initialize our MongoDB-backed db compatibility layer
 db.init_app(app)
 
@@ -1553,26 +1596,38 @@ def timetable_entries():
 @app.route('/timetable/generate', methods=['POST'])
 @admin_required
 def generate_timetable():
-    # Clear existing timetable
-    TimetableEntry.query.delete()
-    db.session.commit()
-    
-    # Generate new timetable
-    generator = TimetableGenerator(db)
-    result = generator.generate()
-    
-    if result['success']:
-        return jsonify({
-            'success': True,
-            'message': f'Timetable generated successfully! {result["entries_created"]} entries created.',
-            'warnings': result.get('warnings', [])
-        })
+    task = generate_timetable_task.delay()
+    return jsonify({
+        'success': True,
+        'message': 'Timetable generation started in background.',
+        'task_id': task.id
+    }), 202
+
+@app.route('/tasks/<task_id>')
+@login_required
+def get_task_status(task_id):
+    task = generate_timetable_task.AsyncResult(task_id)
+    if task.state == 'PENDING':
+        response = {
+            'state': task.state,
+            'status': 'Pending...'
+        }
+    elif task.state != 'FAILURE':
+        # task.info is the result or status dict
+        response = {
+            'state': task.state,
+            'status': task.info.get('status', '') if isinstance(task.info, dict) else str(task.info)
+        }
+        if task.state == 'SUCCESS':
+            result = task.result
+            if isinstance(result, dict):
+                response.update(result)
     else:
-        return jsonify({
-            'success': False,
-            'message': result.get('error', 'Failed to generate timetable'),
-            'warnings': result.get('warnings', [])
-        })
+        response = {
+            'state': task.state,
+            'status': str(task.info),  # Exception info
+        }
+    return jsonify(response)
 
 
 @app.route('/timetable/manual-save', methods=['POST'])

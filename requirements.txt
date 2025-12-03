@@ -8,3 +8,5 @@ dnspython>=2.4
 python-dotenv>=1.0.0
 gunicorn==21.2.0
 bcrypt==4.1.2
+celery==5.3.6
+redis==5.0.1
