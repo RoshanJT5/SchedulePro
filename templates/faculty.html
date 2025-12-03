@@ -275,7 +275,10 @@
         btn.disabled = true;
         btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
 
-        fetch('/faculty/delete-all', { method: 'POST' })
+        fetch('/faculty/delete-all', { 
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
