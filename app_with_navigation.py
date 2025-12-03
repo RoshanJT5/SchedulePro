@@ -592,26 +592,37 @@ def refresh():
 
 @app.route('/logout')
 def logout():
-    # Revoke tokens if present
-    access_token = request.cookies.get('access_token')
-    refresh_token = request.cookies.get('refresh_token')
-    
-    if access_token:
-        payload = decode_token(access_token)
-        if payload:
-            revoke_token(payload['jti'], 15*60)
-            
-    if refresh_token:
-        payload = decode_token(refresh_token)
-        if payload:
-            revoke_token(payload['jti'], 7*24*60*60)
+    try:
+        # Revoke tokens if present
+        access_token = request.cookies.get('access_token')
+        refresh_token = request.cookies.get('refresh_token')
+        
+        if access_token:
+            try:
+                payload = decode_token(access_token)
+                if payload:
+                    revoke_token(payload['jti'], 15*60)
+            except Exception:
+                pass
+                
+        if refresh_token:
+            try:
+                payload = decode_token(refresh_token)
+                if payload:
+                    revoke_token(payload['jti'], 7*24*60*60)
+            except Exception:
+                pass
 
-    session.clear()
-    flash('You have been logged out', 'info')
-    resp = make_response(redirect(url_for('login')))
-    resp.delete_cookie('access_token')
-    resp.delete_cookie('refresh_token')
-    return resp
+        session.clear()
+        flash('You have been logged out', 'info')
+        resp = make_response(redirect(url_for('login')))
+        resp.delete_cookie('access_token')
+        resp.delete_cookie('refresh_token')
+        return resp
+    except Exception as e:
+        print(f"Logout error: {e}")
+        session.clear()
+        return redirect(url_for('login'))
 
 
 @app.route('/download-template/<entity>')
