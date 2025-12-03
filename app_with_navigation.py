@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, session, flash, abort
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, session, flash, abort, g, make_response
 from celery import Celery
 from cache import cache_response, invalidate_cache
+from auth_jwt import create_tokens, decode_token, revoke_token, is_token_revoked
 from models import db, Course, Faculty, Room, Student, TimeSlot, TimetableEntry, User, PeriodConfig, BreakConfig, StudentGroup
 from scheduler import TimetableGenerator
 from functools import wraps
@@ -414,34 +415,63 @@ with app.app_context():
 
     hydrate_default_faculty_values()
 
+def get_current_user():
+    """Get the current user from session or JWT"""
+    if 'user_id' in session:
+        return User.query.get(session['user_id'])
+    if hasattr(g, 'user_id'):
+        return User.query.get(g.user_id)
+    return None
+
 # Authentication decorators
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            # If the caller expects JSON (XHR), return JSON error instead of redirect
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
-                return jsonify({'success': False, 'error': 'Authentication required'}), 401
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
+        # Check Session
+        if 'user_id' in session:
+            return f(*args, **kwargs)
+            
+        # Check JWT
+        token = request.cookies.get('access_token')
+        if token:
+            payload = decode_token(token)
+            if payload and payload['type'] == 'access':
+                g.user_id = int(payload['sub'])
+                g.user_role = payload['role']
+                return f(*args, **kwargs)
+
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+        return redirect(url_for('login'))
     return decorated_function
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            # If the caller expects JSON (XHR), return JSON error instead of redirect
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
-                return jsonify({'success': False, 'error': 'Authentication required'}), 401
-            return redirect(url_for('login'))
-        user = User.query.get(session['user_id'])
-        if not user or user.role != 'admin':
-            # For XHR/JSON callers return JSON error; otherwise flash and redirect.
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
-                return jsonify({'success': False, 'error': 'Access denied. Admin privileges required.'}), 403
-            flash('Access denied. Admin privileges required.', 'danger')
-            return redirect(url_for('index'))
-        return f(*args, **kwargs)
+        # Check Session
+        if 'user_id' in session:
+            user = User.query.get(session['user_id'])
+            if not user or user.role != 'admin':
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+                    return jsonify({'success': False, 'error': 'Access denied. Admin privileges required.'}), 403
+                flash('Access denied. Admin privileges required.', 'danger')
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
+
+        # Check JWT
+        token = request.cookies.get('access_token')
+        if token:
+            payload = decode_token(token)
+            if payload and payload['type'] == 'access':
+                if payload['role'] == 'admin':
+                    g.user_id = int(payload['sub'])
+                    g.user_role = payload['role']
+                    return f(*args, **kwargs)
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'success': False, 'error': 'Access denied. Admin privileges required.'}), 403
+        flash('Access denied. Admin privileges required.', 'danger')
+        return redirect(url_for('login'))
     return decorated_function
 
 # Authentication Routes
@@ -457,12 +487,25 @@ def login():
             # Save user in case password was migrated from Werkzeug to bcrypt
             user.save()
             
+            # Create JWTs
+            access_token, refresh_token = create_tokens(user.id, user.role)
+            
+            # Set Session (Legacy support)
             session['user_id'] = user.id
             session['username'] = user.username
             session['role'] = user.role
             session['name'] = user.name
+            
             flash(f'Welcome back, {user.name}!', 'success')
-            return redirect(url_for('index'))
+            
+            resp = make_response(redirect(url_for('index')))
+            
+            # Set Cookies (HttpOnly, Secure if HTTPS)
+            is_secure = request.scheme == 'https'
+            resp.set_cookie('access_token', access_token, httponly=True, secure=is_secure, samesite='Lax', max_age=15*60)
+            resp.set_cookie('refresh_token', refresh_token, httponly=True, secure=is_secure, samesite='Lax', max_age=7*24*60*60)
+            
+            return resp
         else:
             flash('Invalid username or password', 'danger')
     
@@ -495,11 +538,50 @@ def register():
     
     return render_template('register.html')
 
+@app.route('/refresh', methods=['POST'])
+def refresh():
+    refresh_token = request.cookies.get('refresh_token')
+    if not refresh_token:
+        return jsonify({'message': 'Missing refresh token'}), 401
+        
+    payload = decode_token(refresh_token)
+    if not payload or payload['type'] != 'refresh':
+        return jsonify({'message': 'Invalid refresh token'}), 401
+        
+    # Rotate tokens: Revoke old refresh token
+    revoke_token(payload['jti'], 7*24*60*60)
+    
+    new_access, new_refresh = create_tokens(payload['sub'], payload['role'])
+    
+    resp = make_response(jsonify({'message': 'Token refreshed'}))
+    is_secure = request.scheme == 'https'
+    resp.set_cookie('access_token', new_access, httponly=True, secure=is_secure, samesite='Lax', max_age=15*60)
+    resp.set_cookie('refresh_token', new_refresh, httponly=True, secure=is_secure, samesite='Lax', max_age=7*24*60*60)
+    
+    return resp
+
 @app.route('/logout')
 def logout():
+    # Revoke tokens if present
+    access_token = request.cookies.get('access_token')
+    refresh_token = request.cookies.get('refresh_token')
+    
+    if access_token:
+        payload = decode_token(access_token)
+        if payload:
+            revoke_token(payload['jti'], 15*60)
+            
+    if refresh_token:
+        payload = decode_token(refresh_token)
+        if payload:
+            revoke_token(payload['jti'], 7*24*60*60)
+
     session.clear()
     flash('You have been logged out', 'info')
-    return redirect(url_for('login'))
+    resp = make_response(redirect(url_for('login')))
+    resp.delete_cookie('access_token')
+    resp.delete_cookie('refresh_token')
+    return resp
 
 
 @app.route('/download-template/<entity>')
