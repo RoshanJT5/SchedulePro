@@ -374,6 +374,11 @@ class TimetableGenerator:
         warnings = []
         problem = pulp.LpProblem("Timetable", pulp.LpMinimize)
         
+        print(f"[ILP] Starting ILP solver with {len(context['sessions'])} sessions")
+        print(f"[ILP] Faculty count: {len(context['faculty'])}")
+        print(f"[ILP] Room count: {len(context['rooms'])}")
+        print(f"[ILP] Time slot count: {len(context['time_slots'])}")
+        
         # Build candidates for each session
         session_candidates = {}
         decision_vars = {}
@@ -383,17 +388,22 @@ class TimetableGenerator:
             eligible_faculty = self._faculty_for_course(course, context["faculty"], context["faculty_expertise"])
             eligible_rooms = self._rooms_for_course(course, context["rooms"], context["room_capabilities"])
             
+            print(f"[ILP] Session {session.id} ({course.code}): {len(eligible_faculty)} faculty, {len(eligible_rooms)} rooms")
+            
             if not eligible_faculty:
                 warnings.append(f"⚠️ No faculty available for course {course.code}")
+                print(f"[ILP] WARNING: No eligible faculty for {course.code}")
                 continue
             if not eligible_rooms:
                 warnings.append(f"⚠️ No suitable rooms for course {course.code}")
+                print(f"[ILP] WARNING: No eligible rooms for {course.code}")
                 continue
             
             candidates = []
             for faculty in eligible_faculty:
                 # Constraint 3: Only consider available timeslots
                 available_slots = context["faculty_availability"].get(faculty.id, set())
+                print(f"[ILP]   Faculty {faculty.name} (ID:{faculty.id}) has {len(available_slots)} available slots")
                 
                 for room in eligible_rooms:
                     for slot in context["time_slots"]:
@@ -430,8 +440,10 @@ class TimetableGenerator:
             
             if not candidates:
                 warnings.append(f"⚠️ No valid candidates for session {session.id} of {course.code}")
+                print(f"[ILP] ERROR: No valid candidates for session {session.id} ({course.code}) - likely no faculty availability!")
                 continue
             
+            print(f"[ILP] Session {session.id} has {len(candidates)} valid candidates")
             session_candidates[session.id] = candidates
             
             # Constraint: Each session assigned exactly once
@@ -440,6 +452,8 @@ class TimetableGenerator:
                 problem += pulp.lpSum(c["var"] for c in candidates) <= 1, f"session_{session.id}_opt"
             else:
                 problem += pulp.lpSum(c["var"] for c in candidates) == 1, f"session_{session.id}"
+        
+        print(f"[ILP] Total sessions with candidates: {len(session_candidates)} out of {len(context['sessions'])}")
         
         # Constraint: No faculty/room/group conflicts per timeslot
         faculty_slot_usage = defaultdict(list)
