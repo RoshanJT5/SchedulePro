@@ -1592,6 +1592,10 @@ def timetable():
 
     # Filter entries to only include those with valid time_slot_id
     entries = [e for e in entries_query.all() if e.time_slot_id in valid_slot_ids]
+    
+    print(f"[TIMETABLE VIEW] Loading timetable for user: {user.username} (role: {user.role})")
+    print(f"[TIMETABLE VIEW] Found {len(entries)} timetable entries")
+    print(f"[TIMETABLE VIEW] Found {len(slots)} time slots")
 
     courses_dict = {c.id: c for c in Course.query.all()}
     faculty_dict = {f.id: f for f in Faculty.query.all()}
