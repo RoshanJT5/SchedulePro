@@ -1944,99 +1944,116 @@ def settings():
 @app.route('/settings/period', methods=['POST'])
 @admin_required
 def update_period_config():
-    data = request.json
-    print(f"[DEBUG] Received data: {data}")
-    
-    period_config = PeriodConfig.query.first()
-    
-    if not period_config:
-        print("[DEBUG] No existing config found, creating new one")
-        period_config = PeriodConfig(id=1)
-    else:
-        print(f"[DEBUG] Existing config found: periods_per_day={period_config.periods_per_day}, days_of_week={period_config.days_of_week}")
-    
-    # Update the config fields
-    period_config.periods_per_day = int(data['periods_per_day'])
-    period_config.period_duration_minutes = int(data['period_duration_minutes'])
-    period_config.day_start_time = data['day_start_time']
-    period_config.days_of_week = ','.join(data.get('days_of_week', []))
-    
-    print(f"[DEBUG] Updated config: periods_per_day={period_config.periods_per_day}, days_of_week={period_config.days_of_week}")
-    
-    # CRITICAL FIX: Always add to session, even for existing configs
-    # This ensures the _save() method is called during commit
-    db.session.add(period_config)
-    
-    # Enforce singleton: remove any stray extra PeriodConfig documents
     try:
-        existing = PeriodConfig.query.all()
-        for cfg in existing:
-            if getattr(cfg, 'id', None) != 1:
-                db.session.delete(cfg)
-        # Flush deletions before commit
-        db.session.flush()
-    except Exception as _:
-        pass
-    db.session.commit()
-    
-    print("[DEBUG] Committed to database")
-    
-    # Verify the save by querying again
-    verify_config = PeriodConfig.query.first()
-    print(f"[DEBUG] Verification query: periods_per_day={verify_config.periods_per_day}, days_of_week={verify_config.days_of_week}")
-    
-    # Regenerate time slots
-    generate_time_slots()
-    
-    return jsonify({'success': True, 'message': 'Period configuration updated and time slots regenerated.'})
+        data = request.json
+        print(f"[DEBUG] Received data: {data}")
+        
+        period_config = PeriodConfig.query.first()
+        
+        if not period_config:
+            print("[DEBUG] No existing config found, creating new one")
+            period_config = PeriodConfig(id=1)
+        else:
+            print(f"[DEBUG] Existing config found: periods_per_day={period_config.periods_per_day}, days_of_week={period_config.days_of_week}")
+        
+        # Update the config fields
+        period_config.periods_per_day = int(data['periods_per_day'])
+        period_config.period_duration_minutes = int(data['period_duration_minutes'])
+        period_config.day_start_time = data['day_start_time']
+        period_config.days_of_week = ','.join(data.get('days_of_week', []))
+        
+        print(f"[DEBUG] Updated config: periods_per_day={period_config.periods_per_day}, days_of_week={period_config.days_of_week}")
+        
+        # CRITICAL FIX: Always add to session, even for existing configs
+        db.session.add(period_config)
+        
+        # Enforce singleton: remove any stray extra PeriodConfig documents
+        try:
+            existing = PeriodConfig.query.all()
+            for cfg in existing:
+                if getattr(cfg, 'id', None) != 1:
+                    db.session.delete(cfg)
+            # Flush deletions before commit
+            db.session.flush()
+        except Exception as _:
+            pass
+        db.session.commit()
+        
+        print("[DEBUG] Committed to database")
+        
+        # Verify the save by querying again
+        verify_config = PeriodConfig.query.first()
+        if verify_config:
+            print(f"[DEBUG] Verification query: periods_per_day={verify_config.periods_per_day}, days_of_week={verify_config.days_of_week}")
+        
+        # Regenerate time slots
+        generate_time_slots()
+        
+        return jsonify({'success': True, 'message': 'Period configuration updated and time slots regenerated.'})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating period config: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/settings/break/add', methods=['POST'])
 @admin_required
 def add_break():
-    data = request.json
-    break_config = BreakConfig(
-        break_name=data['break_name'],
-        after_period=int(data['after_period']),
-        duration_minutes=int(data['duration_minutes']),
-        order=int(data.get('order', 1))
-    )
-    db.session.add(break_config)
-    db.session.commit()
-    
-    # Regenerate time slots
-    generate_time_slots()
-    
-    return jsonify({'success': True, 'id': break_config.id})
+    try:
+        data = request.json
+        break_config = BreakConfig(
+            break_name=data['break_name'],
+            after_period=int(data['after_period']),
+            duration_minutes=int(data['duration_minutes']),
+            order=int(data.get('order', 1))
+        )
+        db.session.add(break_config)
+        db.session.commit()
+        
+        # Regenerate time slots
+        generate_time_slots()
+        
+        return jsonify({'success': True, 'id': break_config.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/settings/break/<int:break_id>/update', methods=['POST'])
 @admin_required
 def update_break(break_id):
-    data = request.json
-    break_config = BreakConfig.query.get_or_404(break_id)
-    
-    break_config.break_name = data['break_name']
-    break_config.after_period = int(data['after_period'])
-    break_config.duration_minutes = int(data['duration_minutes'])
-    break_config.order = int(data.get('order', break_config.order))
-    
-    db.session.commit()
-    
-    # Regenerate time slots
-    generate_time_slots()
-    
-    return jsonify({'success': True})
+    try:
+        data = request.json
+        break_config = BreakConfig.query.get_or_404(break_id)
+        
+        break_config.break_name = data['break_name']
+        break_config.after_period = int(data['after_period'])
+        break_config.duration_minutes = int(data['duration_minutes'])
+        break_config.order = int(data.get('order', break_config.order))
+        
+        db.session.commit()
+        
+        # Regenerate time slots
+        generate_time_slots()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/settings/break/<int:break_id>/delete', methods=['POST'])
 @admin_required
 def delete_break(break_id):
-    break_config = BreakConfig.query.get_or_404(break_id)
-    db.session.delete(break_config)
-    db.session.commit()
-    
-    # Regenerate time slots
-    generate_time_slots()
-    
-    return jsonify({'success': True})
+    try:
+        break_config = BreakConfig.query.get_or_404(break_id)
+        db.session.delete(break_config)
+        db.session.commit()
+        
+        # Regenerate time slots
+        generate_time_slots()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/timetable/export')
 @login_required
