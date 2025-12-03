@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, session, flash, abort
 from celery import Celery
+from cache import cache_response, invalidate_cache
 from models import db, Course, Faculty, Room, Student, TimeSlot, TimetableEntry, User, PeriodConfig, BreakConfig, StudentGroup
 from scheduler import TimetableGenerator
 from functools import wraps
@@ -636,6 +637,7 @@ def add_course():
     )
     db.session.add(course)
     db.session.commit()
+    invalidate_cache('timetable_view')
     return jsonify({'success': True, 'id': course.id})
 
 @app.route('/courses/<int:course_id>/delete', methods=['POST'])
@@ -647,6 +649,7 @@ def delete_course(course_id):
     TimetableEntry.query.filter_by(course_id=course.id).delete(synchronize_session=False)
     db.session.delete(course)
     db.session.commit()
+    invalidate_cache('timetable_view')
     return jsonify({'success': True})
 
 @app.route('/courses/import', methods=['POST'])
@@ -1427,6 +1430,7 @@ def delete_all_student_groups():
 # Timetable Generation
 @app.route('/timetable')
 @login_required
+@cache_response(ttl=300, prefix='timetable_view')
 def timetable():
     user = User.query.get(session['user_id'])
     entries_query = TimetableEntry.query
@@ -1568,6 +1572,7 @@ def timetable():
 
 @app.route('/timetable/entries')
 @login_required
+@cache_response(ttl=300, prefix='timetable_entries')
 def timetable_entries():
     # Return entries for a given day to prefill manual assignment UI
     day = request.args.get('day')
@@ -1596,6 +1601,8 @@ def timetable_entries():
 @app.route('/timetable/generate', methods=['POST'])
 @admin_required
 def generate_timetable():
+    invalidate_cache('timetable_view')
+    invalidate_cache('timetable_entries')
     task = generate_timetable_task.delay()
     return jsonify({
         'success': True,

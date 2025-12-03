@@ -76,8 +76,18 @@ class _DB:
         self.engine = None
 
     def create_all(self):
-        # No-op for MongoDB; ensure indexes where needed
-        pass
+        # Create indexes
+        if self._db is not None:
+            try:
+                self._db['user'].create_index('username', unique=True)
+                self._db['timetableentry'].create_index([('time_slot_id', 1)])
+                self._db['timetableentry'].create_index([('faculty_id', 1)])
+                self._db['timetableentry'].create_index([('room_id', 1)])
+                self._db['timetableentry'].create_index([('student_group', 1)])
+                self._db['timeslot'].create_index([('day', 1), ('period', 1)])
+                print("[MongoDB] Indexes created successfully.")
+            except Exception as e:
+                print(f"[MongoDB] Index creation failed: {e}")
 
     def drop_all(self):
         # No-op
@@ -121,9 +131,18 @@ class Query:
         self.model_cls = model_cls
         self._filter = {}
         self._sort = None
+        self._projection = None
 
     def filter_by(self, **kwargs):
         self._filter.update(kwargs)
+        return self
+    
+    def options(self, projection):
+        """
+        Specify fields to include/exclude.
+        Usage: Model.query.options({'field1': 1, 'field2': 1})
+        """
+        self._projection = projection
         return self
 
     def order_by(self, *attrs):
@@ -142,14 +161,14 @@ class Query:
 
     def all(self):
         coll = db._db[_get_collection_name(self.model_cls)]
-        cursor = coll.find(self._filter)
+        cursor = coll.find(self._filter, self._projection)
         if self._sort:
             cursor = cursor.sort(self._sort)
         return [self.model_cls(**doc) for doc in cursor]
 
     def first(self):
         coll = db._db[_get_collection_name(self.model_cls)]
-        doc = coll.find_one(self._filter)
+        doc = coll.find_one(self._filter, self._projection)
         if not doc:
             return None
         return self.model_cls(**doc)
