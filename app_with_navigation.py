@@ -1746,14 +1746,51 @@ def timetable_entries():
 @app.route('/timetable/generate', methods=['POST'])
 @admin_required
 def generate_timetable():
-    invalidate_cache('timetable_view')
-    invalidate_cache('timetable_entries')
-    task = generate_timetable_task.delay()
-    return jsonify({
-        'success': True,
-        'message': 'Timetable generation started in background.',
-        'task_id': task.id
-    }), 202
+    try:
+        invalidate_cache('timetable_view')
+        invalidate_cache('timetable_entries')
+        
+        # Try async generation with Celery (for local development with Redis)
+        try:
+            task = generate_timetable_task.delay()
+            return jsonify({
+                'success': True,
+                'message': 'Timetable generation started in background.',
+                'task_id': task.id
+            }), 202
+        except Exception as celery_error:
+            # Celery not available (e.g., on Vercel) - run synchronously
+            print(f"Celery unavailable ({celery_error}), running synchronously...")
+            
+            # Clear existing timetable
+            TimetableEntry.query.delete()
+            db.session.commit()
+            
+            # Generate new timetable synchronously
+            generator = TimetableGenerator(db)
+            result = generator.generate()
+            
+            if result.get('success'):
+                return jsonify({
+                    'success': True,
+                    'message': 'Timetable generated successfully!',
+                    'result': result
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Generation failed')
+                }), 400
+                
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error generating timetable: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to generate timetable: {str(e)}'
+        }), 500
 
 @app.route('/tasks/<task_id>')
 @login_required

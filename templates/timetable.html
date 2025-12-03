@@ -372,7 +372,14 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         })
-            .then(r => r.json())
+            .then(response => {
+                // Check if it's a JSON response
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned non-JSON response. Please check server logs.');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (btn) {
                     btn.disabled = false;
@@ -380,14 +387,23 @@
                 }
 
                 if (data.success) {
-                    let message = '✓ ' + data.message;
-                    if (data.warnings && data.warnings.length > 0) {
-                        message += '\n\n⚠ Warnings:\n' + data.warnings.join('\n');
+                    // Handle both async (task_id) and sync (immediate result) responses
+                    let message = '✓ ' + (data.message || 'Timetable generated successfully!');
+
+                    // Check for warnings in result
+                    const warnings = data.warnings || (data.result && data.result.warnings);
+                    if (warnings && warnings.length > 0) {
+                        message += '\n\n⚠ Warnings:\n' + warnings.join('\n');
                     }
-                    alert(message);
-                    location.reload();
+
+                    UI.showToast(message, 'success');
+
+                    // Reload after a short delay to show the toast
+                    setTimeout(() => location.reload(), 1500);
                 } else {
-                    alert('✗ Error: ' + (data.message || 'Failed to generate timetable'));
+                    const errorMsg = data.error || data.message || 'Failed to generate timetable';
+                    UI.showToast('Error: ' + errorMsg, 'error');
+
                     if (data.warnings && data.warnings.length > 0) {
                         console.warn('Warnings:', data.warnings);
                     }
@@ -398,7 +414,8 @@
                     btn.disabled = false;
                     btn.innerHTML = originalText;
                 }
-                alert('✗ Error: ' + err.message);
+                console.error('Generation error:', err);
+                UI.showToast('Error: ' + err.message, 'error');
             });
     }
 
