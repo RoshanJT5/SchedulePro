@@ -314,7 +314,7 @@ class User(BaseModel):
 
 class Course(BaseModel):
     def __repr__(self):
-        return f'<Course {getattr(self, "code", None)}>'
+        return f'<Course {getattr(self, "code", None)} {getattr(self, "program", "")} Sem-{getattr(self, "semester", "")}>'
 
 
 class Faculty(BaseModel):
@@ -334,7 +334,7 @@ class Student(BaseModel):
 
 class StudentGroup(BaseModel):
     def __repr__(self):
-        return f'<StudentGroup {getattr(self, "name", None)}>'
+        return f'<StudentGroup {getattr(self, "name", None)} {getattr(self, "program", "")}-{getattr(self, "branch", "")} Sem-{getattr(self, "semester", "")}>'
 
 
 class PeriodConfig(BaseModel):

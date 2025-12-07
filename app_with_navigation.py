@@ -336,20 +336,38 @@ app.config['CELERY_RESULT_BACKEND'] = os.getenv('CELERY_RESULT_BACKEND', 'redis:
 celery = make_celery(app)
 
 @celery.task(bind=True)
-def generate_timetable_task(self):
+def generate_timetable_task(self, filters=None):
     """Background task to generate timetable"""
     try:
         self.update_state(state='PROGRESS', meta={'status': 'Initializing generation...'})
         
-        # Clear existing timetable
-        TimetableEntry.query.delete()
+        # Clear existing timetable (selectively or all)
+        if filters:
+            # Targeted deletion
+            target_groups = StudentGroup.query
+            if filters.get('program'):
+                target_groups = target_groups.filter_by(program=filters['program'])
+            if filters.get('semester'):
+                try:
+                    sem = int(filters['semester'])
+                    target_groups = target_groups.filter_by(semester=sem)
+                except: pass
+            
+            groups = target_groups.all()
+            # Delete entries for these groups
+            for group in groups:
+                 TimetableEntry.query.filter_by(student_group=group.name).delete()
+        else:
+            # Full deletion
+            TimetableEntry.query.delete()
+        
         db.session.commit()
         
         self.update_state(state='PROGRESS', meta={'status': 'Running algorithm...'})
         
         # Generate new timetable
         generator = TimetableGenerator(db)
-        result = generator.generate()
+        result = generator.generate(filters=filters)
         
         return result
     except Exception as e:
@@ -432,6 +450,8 @@ with app.app_context():
 
     # Ensure new schema columns exist
     ensure_column('course', 'branch', 'VARCHAR(100)')
+    ensure_column('course', 'program', 'VARCHAR(100)')
+    ensure_column('course', 'semester', 'INTEGER')
     ensure_column('course', 'required_room_tags', 'VARCHAR(255)')
     ensure_column('faculty', 'username', 'VARCHAR(80)')
     ensure_column('faculty', 'min_hours_per_week', 'INTEGER')
@@ -441,6 +461,9 @@ with app.app_context():
     ensure_column('student', 'username', 'VARCHAR(80)')
     ensure_column('student', 'user_id', 'INTEGER')
     ensure_column('student_group', 'total_students', 'INTEGER')
+    ensure_column('student_group', 'program', 'VARCHAR(100)')
+    ensure_column('student_group', 'branch', 'VARCHAR(100)')
+    ensure_column('student_group', 'semester', 'INTEGER')
     ensure_column('student_group', 'batches', 'TEXT')
 
     hydrate_default_faculty_values()
@@ -636,7 +659,7 @@ def download_template(entity):
         abort(404)
 
     if entity == 'courses':
-        columns = ['code', 'name', 'credits', 'hours_per_week', 'course_type', 'branch', 'required_room_tags']
+        columns = ['code', 'name', 'credits', 'hours_per_week', 'course_type', 'program', 'branch', 'semester', 'required_room_tags']
         filename_base = 'courses_template'
     elif entity == 'faculty':
         columns = ['name', 'username', 'email', 'expertise', 'password', 'min_hours_per_week', 'max_hours_per_week', 'availability']
@@ -648,7 +671,7 @@ def download_template(entity):
         columns = ['student_id', 'name', 'username', 'password', 'enrolled_courses']
         filename_base = 'students_template'
     elif entity == 'student-groups':
-        columns = ['name', 'description', 'total_students', 'batches', 'batches_students']
+        columns = ['name', 'description', 'program', 'branch', 'semester', 'total_students', 'batches', 'batches_students']
         filename_base = 'student_groups_template'
 
     if fmt == 'csv':
@@ -755,7 +778,9 @@ def add_course():
         credits=int(data['credits']),
         course_type=data['type'],
         hours_per_week=int(data['hours_per_week']),
+        program=data.get('program', '').strip() or None,
         branch=data.get('branch', '').strip() or None,
+        semester=parse_int(data.get('semester')),
         required_room_tags=','.join(tag.strip() for tag in data.get('required_room_tags', '').split(',') if tag.strip())
     )
     db.session.add(course)
@@ -825,7 +850,9 @@ def import_courses():
                     'credits': parse_int(row.get('credits'), 0),
                     'course_type': course_type,
                     'hours_per_week': parse_int(row.get('hours_per_week'), 1),
+                    'program': str(row.get('program', '')).strip() or None,
                     'branch': branch,
+                    'semester': parse_int(row.get('semester'), 0),
                     'required_room_tags': tags
                 }
 
@@ -834,7 +861,9 @@ def import_courses():
                     course.credits = payload['credits']
                     course.course_type = payload['course_type']
                     course.hours_per_week = payload['hours_per_week']
+                    course.program = payload['program']
                     course.branch = payload['branch']
+                    course.semester = payload['semester']
                     course.required_room_tags = payload['required_room_tags']
                     updated += 1
                     db.session.add(course)
@@ -845,7 +874,9 @@ def import_courses():
                         credits=payload['credits'],
                         course_type=payload['course_type'],
                         hours_per_week=payload['hours_per_week'],
+                        program=payload['program'],
                         branch=payload['branch'],
+                        semester=payload['semester'],
                         required_room_tags=payload['required_room_tags']
                     )
                     existing_courses[code] = course
@@ -1428,6 +1459,9 @@ def student_groups():
             'id': getattr(g, 'id', None),
             'name': getattr(g, 'name', ''),
             'description': getattr(g, 'description', ''),
+            'program': getattr(g, 'program', ''),
+            'branch': getattr(g, 'branch', ''),
+            'semester': getattr(g, 'semester', 0),
             'total_students': getattr(g, 'total_students', 0),
             'batches': batches
         })
@@ -1462,6 +1496,9 @@ def add_student_group():
     group = StudentGroup(
         name=name,
         description=data.get('description', ''),
+        program=data.get('program', '').strip() or None,
+        branch=data.get('branch', '').strip() or None,
+        semester=parse_int(data.get('semester'), 0),
         total_students=total_students,
         batches=batches_json
     )
@@ -1510,7 +1547,12 @@ def import_student_groups():
                 name = str(row.get('name', '')).strip()
                 if not name: continue
                 
+                if not name: continue
+                
                 description = str(row.get('description', '')).strip()
+                program = str(row.get('program', '')).strip() or None
+                branch = str(row.get('branch', '')).strip() or None
+                semester = parse_int(row.get('semester'), 0)
                 total_students = parse_int(row.get('total_students'), None)
                 
                 # Parse batches
@@ -1529,6 +1571,9 @@ def import_student_groups():
                 if group:
                     group.name = name
                     group.description = description
+                    group.program = program
+                    group.branch = branch
+                    group.semester = semester
                     group.total_students = total_students
                     if batches_json:
                         group.batches = batches_json
@@ -1538,6 +1583,9 @@ def import_student_groups():
                     group = StudentGroup(
                         name=name,
                         description=description,
+                        program=program,
+                        branch=branch,
+                        semester=semester,
                         total_students=total_students,
                         batches=batches_json
                     )
@@ -1754,9 +1802,17 @@ def generate_timetable():
         invalidate_cache('timetable_view')
         invalidate_cache('timetable_entries')
         
+        # Parse filters
+        data = request.get_json() or {}
+        filters = {}
+        if data.get('program'):
+            filters['program'] = data['program']
+        if data.get('semester'):
+            filters['semester'] = parse_int(data['semester'])
+        
         # Try async generation with Celery (for local development with Redis)
         try:
-            task = generate_timetable_task.delay()
+            task = generate_timetable_task.delay(filters)
             return jsonify({
                 'success': True,
                 'message': 'Timetable generation started in background.',
@@ -1766,14 +1822,30 @@ def generate_timetable():
             # Celery not available (e.g., on Vercel) - run synchronously
             print(f"Celery unavailable ({celery_error}), running synchronously...")
             
-            # Clear existing timetable
-            TimetableEntry.query.delete()
+            # Clear existing timetable (selectively or all)
+            if filters:
+                # Targeted deletion
+                target_groups = StudentGroup.query
+                if filters.get('program'):
+                    target_groups = target_groups.filter_by(program=filters['program'])
+                if filters.get('semester'):
+                    try:
+                        sem = int(filters['semester'])
+                        target_groups = target_groups.filter_by(semester=sem)
+                    except: pass
+                
+                groups = target_groups.all()
+                for group in groups:
+                        TimetableEntry.query.filter_by(student_group=group.name).delete()
+            else:
+                TimetableEntry.query.delete()
+
             db.session.commit()
             
             # Generate new timetable synchronously
             print("[GENERATE] Starting timetable generation...")
             generator = TimetableGenerator(db)
-            result = generator.generate()
+            result = generator.generate(filters=filters)
             
             print(f"[GENERATE] Generation complete. Success: {result.get('success')}")
             print(f"[GENERATE] Entries created: {result.get('entries_created', 0)}")

@@ -59,10 +59,10 @@ class TimetableGenerator:
     # --------------------------------------------------------------------- #
     # Public API
     # --------------------------------------------------------------------- #
-    def generate(self):
-        context = self._load_context()
+    def generate(self, filters=None):
+        context = self._load_context(filters)
         if not context["courses"]:
-            return {"success": False, "error": "No courses found. Please add courses first."}
+            return {"success": False, "error": "No courses found matching criteria. Please check filters."}
         if not context["faculty"]:
             return {"success": False, "error": "No faculty found. Please add faculty first."}
         if not context["rooms"]:
@@ -114,12 +114,30 @@ class TimetableGenerator:
     # --------------------------------------------------------------------- #
     # Context Preparation
     # --------------------------------------------------------------------- #
-    def _load_context(self):
-        courses = Course.query.all()
+    def _load_context(self, filters=None):
+        filters = filters or {}
+        course_query = Course.query
+        group_query = StudentGroup.query
+        
+        if filters.get('program'):
+            course_query = course_query.filter_by(program=filters['program'])
+            group_query = group_query.filter_by(program=filters['program'])
+        
+        if filters.get('semester'):
+            # Ensure integer semester
+            try:
+                sem = int(filters['semester'])
+                course_query = course_query.filter_by(semester=sem)
+                group_query = group_query.filter_by(semester=sem)
+            except (ValueError, TypeError):
+                pass
+
+        courses = course_query.all()
+        student_groups = group_query.all()
+        
         faculty = Faculty.query.all()
         rooms = Room.query.all()
         time_slots = TimeSlot.query.order_by(TimeSlot.day, TimeSlot.period).all()
-        student_groups = StudentGroup.query.all()
 
         # Read period configuration to allow per-group/day maximums
         period_config = PeriodConfig.query.first() if 'PeriodConfig' in globals() else None
