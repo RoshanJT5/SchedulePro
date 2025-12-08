@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 from celery import Celery
 from cache import cache_response, invalidate_cache
 from auth_jwt import create_tokens, decode_token, revoke_token, is_token_revoked
-from models import db, Course, Faculty, Room, Student, TimeSlot, TimetableEntry, User, PeriodConfig, BreakConfig, StudentGroup, get_next_id
+from models import db, Course, Faculty, Room, Student, TimeSlot, TimetableEntry, User, PeriodConfig, BreakConfig, StudentGroup, Branch, get_next_id
 from scheduler import TimetableGenerator
 from functools import wraps
 import time
@@ -347,6 +347,8 @@ def generate_timetable_task(self, filters=None):
             target_groups = StudentGroup.query
             if filters.get('program'):
                 target_groups = target_groups.filter_by(program=filters['program'])
+            if filters.get('branch'):
+                target_groups = target_groups.filter_by(branch=filters['branch'])
             if filters.get('semester'):
                 try:
                     sem = int(filters['semester'])
@@ -365,9 +367,34 @@ def generate_timetable_task(self, filters=None):
         
         self.update_state(state='PROGRESS', meta={'status': 'Running algorithm...'})
         
+        # Pre-filter courses and student groups based on filters
+        target_courses = None
+        target_groups = None
+        
+        if filters:
+            # Build course query
+            course_query = Course.query
+            if filters.get('program'):
+                course_query = course_query.filter_by(program=filters['program'])
+            if filters.get('branch'):
+                course_query = course_query.filter_by(branch=filters['branch'])
+            if filters.get('semester'):
+                course_query = course_query.filter_by(semester=filters['semester'])
+            target_courses = course_query.all()
+            
+            # Build student group query
+            group_query = StudentGroup.query
+            if filters.get('program'):
+                group_query = group_query.filter_by(program=filters['program'])
+            if filters.get('branch'):
+                group_query = group_query.filter_by(branch=filters['branch'])
+            if filters.get('semester'):
+                group_query = group_query.filter_by(semester=filters['semester'])
+            target_groups = group_query.all()
+        
         # Generate new timetable
-        generator = TimetableGenerator(db)
-        result = generator.generate(filters=filters)
+        generator = TimetableGenerator(db, courses=target_courses, groups=target_groups)
+        result = generator.generate()
         
         return result
     except Exception as e:
@@ -475,6 +502,38 @@ def get_current_user():
     if hasattr(g, 'user_id'):
         return User.query.get(g.user_id)
     return None
+
+def safe_get_request_data():
+    """
+    Safely extract data from request, supporting JSON, form data, and query parameters.
+    Returns empty dict if no data is available or parsing fails.
+    
+    This prevents JSONDecodeError when request body is empty or malformed.
+    """
+    # Try JSON first (most API calls)
+    try:
+        data = request.get_json(force=True, silent=True)
+        if data is not None:
+            return data
+    except Exception as e:
+        app.logger.debug(f"[Request] JSON parsing failed: {e}")
+    
+    # Try form data (HTML forms)
+    try:
+        if request.form:
+            return request.form.to_dict()
+    except Exception as e:
+        app.logger.debug(f"[Request] Form parsing failed: {e}")
+    
+    # Try query parameters (GET requests with filters)
+    try:
+        if request.args:
+            return request.args.to_dict()
+    except Exception as e:
+        app.logger.debug(f"[Request] Args parsing failed: {e}")
+    
+    # Return empty dict as fallback
+    return {}
 
 # Authentication decorators
 def login_required(f):
@@ -750,7 +809,7 @@ def health_check():
 @app.route('/')
 @login_required
 def index():
-    user = User.query.get(session['user_id'])
+    user = get_current_user()
     stats = {
         'courses': Course.query.count(),
         'faculty': Faculty.query.count(),
@@ -764,29 +823,71 @@ def index():
 @app.route('/courses')
 @login_required
 def courses():
-    user = User.query.get(session['user_id'])
-    courses_list = Course.query.all()
-    return render_template('courses.html', courses=courses_list, user=user)
+    """Main courses page - now shows branches with subjects organized by semester"""
+    user = get_current_user()
+    
+    # Get all branches
+    branches = Branch.query.all()
+    
+    # Build structure: branch -> semesters -> subjects
+    branch_structure = {}
+    for branch in branches:
+        # Get all subjects for this branch
+        subjects = Course.query.filter_by(
+            program=branch.program,
+            branch=branch.name
+        ).all()
+        
+        # Organize by semester
+        subjects_by_semester = {}
+        for semester in range(1, branch.total_semesters + 1):
+            semester_subjects = [
+                s for s in subjects 
+                if getattr(s, 'semester', None) == semester
+            ]
+            subjects_by_semester[semester] = [
+                {
+                    'id': str(s.id) if hasattr(s.id, '__str__') else s.id,  # Convert ObjectId to string
+                    'code': s.code,
+                    'name': s.name,
+                    'credits': getattr(s, 'credits', 0),
+                    'course_type': getattr(s, 'course_type', 'theory'),
+                    'hours_per_week': getattr(s, 'hours_per_week', 0)
+                }
+                for s in semester_subjects
+            ]
+        
+        # Convert branch data to dict and ensure ObjectId is converted
+        branch_dict = branch.to_dict()
+        if '_id' in branch_dict:
+            branch_dict['_id'] = str(branch_dict['_id'])
+        if 'id' in branch_dict:
+            branch_dict['id'] = str(branch_dict['id'])
+        
+        branch_structure[branch.code] = {
+            'branch': branch_dict,
+            'subjects_by_semester': subjects_by_semester
+        }
+    
+    return render_template(
+        'courses.html',
+        branches=branches,
+        branch_structure=branch_structure,
+        user=user
+    )
 
 @app.route('/courses/add', methods=['POST'])
 @admin_required
 def add_course():
-    data = request.json
-    course = Course(
-        code=data['code'],
-        name=data['name'],
-        credits=int(data['credits']),
-        course_type=data['type'],
-        hours_per_week=int(data['hours_per_week']),
-        program=data.get('program', '').strip() or None,
-        branch=data.get('branch', '').strip() or None,
-        semester=parse_int(data.get('semester')),
-        required_room_tags=','.join(tag.strip() for tag in data.get('required_room_tags', '').split(',') if tag.strip())
-    )
-    db.session.add(course)
-    db.session.commit()
-    invalidate_cache('timetable_view')
-    return jsonify({'success': True, 'id': course.id})
+    """
+    DEPRECATED: This route is kept for backward compatibility only.
+    Use /branches/<code>/subjects/add instead for the new branch-based system.
+    """
+    return jsonify({
+        'success': False,
+        'error': 'This endpoint is deprecated. Please use the new branch-based system: Create a branch first, then add subjects to it.',
+        'redirect': '/courses'
+    }), 400
 
 @app.route('/courses/<int:course_id>/delete', methods=['POST'])
 @admin_required
@@ -915,11 +1016,215 @@ def delete_all_courses():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 400
 
+
+# ============================================================================
+# BRANCH MANAGEMENT ROUTES
+# ============================================================================
+
+@app.route('/branches', methods=['GET'])
+@login_required
+def get_branches():
+    """Get all branches"""
+    branches = Branch.query.all()
+    return jsonify({
+        'success': True,
+        'branches': [b.to_dict() for b in branches]
+    })
+
+
+@app.route('/branches/add', methods=['POST'])
+@admin_required
+def add_branch():
+    """Create a new branch/specialization"""
+    try:
+        data = request.json
+        
+        # Check if branch code already exists
+        existing = Branch.query.filter_by(code=data['code']).first()
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': f"Branch with code '{data['code']}' already exists"
+            }), 400
+        
+        branch = Branch(
+            program=data['program'],
+            name=data['name'],
+            code=data['code'],
+            hod_name=data.get('hod_name', ''),
+            duration_years=int(data.get('duration_years', 4)),
+            total_semesters=int(data.get('total_semesters', 8))
+        )
+        
+        db.session.add(branch)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Branch created successfully',
+            'branch': branch.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/branches/<branch_code>', methods=['GET'])
+@login_required
+def get_branch(branch_code):
+    """Get a specific branch with all its subjects organized by semester"""
+    branch = Branch.query.filter_by(code=branch_code).first()
+    if not branch:
+        return jsonify({'success': False, 'error': 'Branch not found'}), 404
+    
+    # Get all subjects for this branch
+    subjects = Course.query.filter_by(branch=branch.name, program=branch.program).all()
+    
+    # Organize by semester
+    subjects_by_semester = {}
+    for semester in range(1, branch.total_semesters + 1):
+        semester_subjects = [s for s in subjects if getattr(s, 'semester', None) == semester]
+        subjects_by_semester[semester] = [
+            {
+                'id': s.id,
+                'code': s.code,
+                'name': s.name,
+                'credits': getattr(s, 'credits', 0),
+                'course_type': getattr(s, 'course_type', 'theory'),
+                'hours_per_week': getattr(s, 'hours_per_week', 0)
+            }
+            for s in semester_subjects
+        ]
+    
+    return jsonify({
+        'success': True,
+        'branch': branch.to_dict(),
+        'subjects_by_semester': subjects_by_semester
+    })
+
+
+@app.route('/branches/<branch_code>/delete', methods=['POST'])
+@admin_required
+def delete_branch(branch_code):
+    """Delete a branch and all its subjects"""
+    try:
+        branch = Branch.query.filter_by(code=branch_code).first()
+        if not branch:
+            return jsonify({'success': False, 'error': 'Branch not found'}), 404
+        
+        # Delete all subjects in this branch
+        Course.query.filter_by(branch=branch.name, program=branch.program).delete()
+        
+        # Delete the branch
+        Branch.query.filter_by(code=branch_code).delete()
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Branch and all subjects deleted'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================================
+# SUBJECT MANAGEMENT ROUTES (within branches)
+# ============================================================================
+
+@app.route('/branches/<branch_code>/subjects/add', methods=['POST'])
+@admin_required
+def add_subject_to_branch(branch_code):
+    """Add a subject to a specific semester of a branch"""
+    try:
+        # Get the branch
+        branch = Branch.query.filter_by(code=branch_code).first()
+        if not branch:
+            return jsonify({'success': False, 'error': 'Branch not found'}), 404
+        
+        data = request.json
+        semester = int(data['semester'])
+        
+        # Validate semester is within range
+        if semester < 1 or semester > branch.total_semesters:
+            return jsonify({
+                'success': False,
+                'error': f'Semester must be between 1 and {branch.total_semesters}'
+            }), 400
+        
+        # Check if subject code already exists in this branch
+        existing = Course.query.filter_by(
+            code=data['code'],
+            branch=branch.name,
+            program=branch.program
+        ).first()
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': f"Subject with code '{data['code']}' already exists in this branch"
+            }), 400
+        
+        # Create the subject (Course)
+        subject = Course(
+            code=data['code'],
+            name=data['name'],
+            program=branch.program,
+            branch=branch.name,
+            semester=semester,
+            credits=int(data.get('credits', 3)),
+            course_type=data.get('type', 'theory').lower(),
+            hours_per_week=int(data.get('hours_per_week', 3)),
+            required_room_tags=data.get('required_room_tags', '')
+        )
+        
+        db.session.add(subject)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Subject added successfully',
+            'subject': {
+                'id': subject.id,
+                'code': subject.code,
+                'name': subject.name,
+                'semester': subject.semester,
+                'credits': subject.credits,
+                'course_type': subject.course_type
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/branches/<branch_code>/subjects/<int:subject_id>/delete', methods=['POST'])
+@admin_required
+def delete_subject_from_branch(branch_code, subject_id):
+    """Delete a subject from a branch"""
+    try:
+        branch = Branch.query.filter_by(code=branch_code).first()
+        if not branch:
+            return jsonify({'success': False, 'error': 'Branch not found'}), 404
+        
+        subject = Course.query.get(subject_id)
+        if not subject:
+            return jsonify({'success': False, 'error': 'Subject not found'}), 404
+        
+        # Verify subject belongs to this branch
+        if subject.branch != branch.name or subject.program != branch.program:
+            return jsonify({'success': False, 'error': 'Subject does not belong to this branch'}), 400
+        
+        Course.query.filter_by(id=subject_id).delete()
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Subject deleted successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # Faculty Management
 @app.route('/faculty')
 @login_required
 def faculty():
-    user = User.query.get(session['user_id'])
+    user = get_current_user()
     faculty_list = Faculty.query.all()
     courses_list = Course.query.all()
     return render_template('faculty.html', faculty=faculty_list, courses=courses_list, user=user)
@@ -952,18 +1257,6 @@ def delete_faculty(faculty_id):
     db.session.delete(faculty)
     if linked_user and linked_user.role == 'teacher':
         db.session.delete(linked_user)
-    db.session.commit()
-    return jsonify({'success': True})
-
-@app.route('/faculty/availability', methods=['POST'])
-@login_required
-def update_own_availability():
-    user = User.query.get(session['user_id'])
-    if user.role != 'teacher':
-        abort(403)
-    faculty = Faculty.query.filter_by(user_id=user.id).first()
-    if not faculty:
-        return jsonify({'success': False, 'error': 'Profile not linked to faculty record'}), 404
     data = request.json or {}
     availability_payload = data.get('availability', {})
     
@@ -1096,7 +1389,7 @@ def delete_all_faculty():
 @app.route('/rooms')
 @login_required
 def rooms():
-    user = User.query.get(session['user_id'])
+    user = get_current_user()
     rooms_list = Room.query.all()
     return render_template('rooms.html', rooms=rooms_list, user=user)
 
@@ -1244,7 +1537,7 @@ def delete_all_rooms():
 @app.route('/students')
 @login_required
 def students():
-    user = User.query.get(session['user_id'])
+    user = get_current_user()
     students_list = Student.query.all()
     courses_list = Course.query.all()
     return render_template('students.html', students=students_list, courses=courses_list, user=user)
@@ -1439,7 +1732,7 @@ def delete_all_students():
 @app.route('/student-groups')
 @admin_required
 def student_groups():
-    user = User.query.get(session['user_id'])
+    user = get_current_user()
     raw_groups = StudentGroup.query.all()
     groups = []
     for g in raw_groups:
@@ -1498,7 +1791,7 @@ def add_student_group():
         description=data.get('description', ''),
         program=data.get('program', '').strip() or None,
         branch=data.get('branch', '').strip() or None,
-        semester=parse_int(data.get('semester'), 0),
+        current_semester=parse_int(data.get('current_semester'), 0),
         total_students=total_students,
         batches=batches_json
     )
@@ -1625,7 +1918,7 @@ def delete_all_student_groups():
 @login_required
 @cache_response(ttl=300, prefix='timetable_view')
 def timetable():
-    user = User.query.get(session['user_id'])
+    user = get_current_user()
     entries_query = TimetableEntry.query
     faculty_profile = None
     if user.role == 'teacher':
@@ -1752,6 +2045,42 @@ def timetable():
         if slot.period not in time_ranges:
             # Format: "09:00 - 10:00"
             time_ranges[slot.period] = f"{slot.start_time} - {slot.end_time}"
+    
+    # Extract unique values for filter dropdowns
+    all_courses = Course.query.all()
+    all_groups = StudentGroup.query.all()
+    
+    # Get unique programs (from both courses and groups)
+    programs_set = set()
+    for c in all_courses:
+        if getattr(c, 'program', None):
+            programs_set.add(c.program)
+    for g in all_groups:
+        if getattr(g, 'program', None):
+            programs_set.add(g.program)
+    programs = sorted(list(programs_set))
+    
+    # Get unique branches
+    branches_set = set()
+    for c in all_courses:
+        if getattr(c, 'branch', None):
+            branches_set.add(c.branch)
+    for g in all_groups:
+        if getattr(g, 'branch', None):
+            branches_set.add(g.branch)
+    branches = sorted(list(branches_set))
+    
+    # Get unique semesters
+    semesters_set = set()
+    for c in all_courses:
+        sem = getattr(c, 'semester', None)
+        if sem is not None:
+            semesters_set.add(sem)
+    for g in all_groups:
+        sem = getattr(g, 'semester', None)
+        if sem is not None:
+            semesters_set.add(sem)
+    semesters = sorted(list(semesters_set))
 
     return render_template('timetable.html', 
                          timetable_data=timetable_data,
@@ -1764,7 +2093,10 @@ def timetable():
                          student_groups=student_groups_list,
                          courses=courses_list,
                          faculty=faculty_list,
-                         rooms=rooms_list)
+                         rooms=rooms_list,
+                         programs=programs,
+                         branches=branches,
+                         semesters=semesters)
 
 
 @app.route('/timetable/entries')
@@ -1807,6 +2139,8 @@ def generate_timetable():
         filters = {}
         if data.get('program'):
             filters['program'] = data['program']
+        if data.get('branch'):
+            filters['branch'] = data['branch']
         if data.get('semester'):
             filters['semester'] = parse_int(data['semester'])
         
@@ -1828,6 +2162,8 @@ def generate_timetable():
                 target_groups = StudentGroup.query
                 if filters.get('program'):
                     target_groups = target_groups.filter_by(program=filters['program'])
+                if filters.get('branch'):
+                    target_groups = target_groups.filter_by(branch=filters['branch'])
                 if filters.get('semester'):
                     try:
                         sem = int(filters['semester'])
@@ -1842,10 +2178,37 @@ def generate_timetable():
 
             db.session.commit()
             
+            # Pre-filter courses and student groups based on filters
+            target_courses = None
+            target_groups = None
+            
+            if filters:
+                # Build course query
+                course_query = Course.query
+                if filters.get('program'):
+                    course_query = course_query.filter_by(program=filters['program'])
+                if filters.get('branch'):
+                    course_query = course_query.filter_by(branch=filters['branch'])
+                if filters.get('semester'):
+                    course_query = course_query.filter_by(semester=filters['semester'])
+                target_courses = course_query.all()
+                
+                # Build student group query
+                group_query = StudentGroup.query
+                if filters.get('program'):
+                    group_query = group_query.filter_by(program=filters['program'])
+                if filters.get('branch'):
+                    group_query = group_query.filter_by(branch=filters['branch'])
+                if filters.get('semester'):
+                    group_query = group_query.filter_by(semester=filters['semester'])
+                target_groups = group_query.all()
+                
+                print(f"[GENERATE] Filtered to {len(target_courses) if target_courses else 0} courses and {len(target_groups) if target_groups else 0} groups")
+            
             # Generate new timetable synchronously
             print("[GENERATE] Starting timetable generation...")
-            generator = TimetableGenerator(db)
-            result = generator.generate(filters=filters)
+            generator = TimetableGenerator(db, courses=target_courses, groups=target_groups)
+            result = generator.generate()
             
             print(f"[GENERATE] Generation complete. Success: {result.get('success')}")
             print(f"[GENERATE] Entries created: {result.get('entries_created', 0)}")
@@ -2049,7 +2412,7 @@ def clear_timetable():
 @app.route('/settings')
 @admin_required
 def settings():
-    user = User.query.get(session['user_id'])
+    user = get_current_user()
     period_config = PeriodConfig.query.first()
     
     print(f"[DEBUG SETTINGS] Loading settings page")

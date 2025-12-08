@@ -52,8 +52,6 @@ class _Session:
                 obj.id = get_next_id(self._db, coll_name)
             
             data = obj.to_dict()
-            # Remove _id from data to prevent WriteError (immutable field)
-            data.pop('_id', None)
             ops[coll_name].append(ReplaceOne({'id': obj.id}, data, upsert=True))
 
         # Execute bulk writes
@@ -233,9 +231,7 @@ class BaseModel(metaclass=ModelMeta):
 
     def to_dict(self) -> Dict[str, Any]:
         d = self.__dict__.copy()
-        # Convert MongoDB ObjectId to string for JSON serialization
-        if '_id' in d and d['_id'] is not None:
-            d['_id'] = str(d['_id'])
+        # remove internal fields
         return d
 
     def _save(self, mongo_db):
@@ -244,9 +240,6 @@ class BaseModel(metaclass=ModelMeta):
         if getattr(self, 'id', None) is None:
             self.id = get_next_id(mongo_db, _get_collection_name(self.__class__))
         data = self.to_dict()
-        # Remove _id from data to prevent WriteError (immutable field)
-        # MongoDB's _id cannot be changed after document creation
-        data.pop('_id', None)
         coll.replace_one({'id': self.id}, data, upsert=True)
 
     def save(self):
@@ -376,32 +369,6 @@ class StudentGroup(BaseModel):
         return f'<StudentGroup {getattr(self, "name", None)} {getattr(self, "program", "")}-{getattr(self, "branch", "")} Sem-{getattr(self, "semester", "")}>'
 
 
-class Branch(BaseModel):
-    """Represents an academic branch/specialization (e.g., Computer Science in B.Tech)"""
-    
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if not hasattr(self, 'program'): self.program = None
-        if not hasattr(self, 'name'): self.name = None
-        if not hasattr(self, 'code'): self.code = None
-        if not hasattr(self, 'hod_name'): self.hod_name = None
-        if not hasattr(self, 'duration_years'): self.duration_years = 4
-        if not hasattr(self, 'total_semesters'): self.total_semesters = 8
-
-    def to_dict(self):
-        d = super().to_dict()
-        d['program'] = getattr(self, 'program', None)
-        d['name'] = getattr(self, 'name', None)
-        d['code'] = getattr(self, 'code', None)
-        d['hod_name'] = getattr(self, 'hod_name', None)
-        d['duration_years'] = getattr(self, 'duration_years', 4)
-        d['total_semesters'] = getattr(self, 'total_semesters', 8)
-        return d
-
-    def __repr__(self):
-        return f'<Branch {getattr(self, "name", None)} ({getattr(self, "program", "")})>'
-
-
 class PeriodConfig(BaseModel):
     def __repr__(self):
         return f'<PeriodConfig {getattr(self, "periods_per_day", None)} periods, {getattr(self, "period_duration_minutes", None)} min>'
@@ -421,4 +388,5 @@ class TimetableEntry(BaseModel):
     def __repr__(self):
         return f'<TimetableEntry {getattr(self, "course_id", None)}-{getattr(self, "faculty_id", None)}-{getattr(self, "room_id", None)}-{getattr(self, "student_group", None)}>'
     pass
+
 

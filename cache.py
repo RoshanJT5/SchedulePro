@@ -8,10 +8,25 @@ import redis
 # Initialize Redis
 # Use DB 1 for cache (0 is typically used for Celery)
 redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
-redis_client = redis.from_url(redis_url)
+redis_client = None
+redis_available = False
+
+# Check Redis availability
+try:
+    _temp_client = redis.from_url(redis_url, socket_connect_timeout=1)
+    _temp_client.ping()
+    redis_client = _temp_client
+    redis_available = True
+    print("[Cache] Redis connected successfully")
+except Exception as e:
+    print(f"[Cache] Redis not available: {e}")
+    print("[Cache] Running in no-cache mode")
+    redis_available = False
 
 def get_cache_version(prefix):
     """Get the current version for a cache prefix."""
+    if not redis_available:
+        return "1"
     try:
         v = redis_client.get(f"version:{prefix}")
         if not v:
@@ -42,6 +57,8 @@ def generate_cache_key(prefix, *args, **kwargs):
 
 def invalidate_cache(prefix):
     """Invalidate all cache keys with a specific prefix by incrementing version."""
+    if not redis_available:
+        return  # Silently skip if Redis is not available
     try:
         redis_client.incr(f"version:{prefix}")
         print(f"[Cache] Invalidated prefix: {prefix}")
@@ -56,6 +73,10 @@ def cache_response(ttl=300, prefix='view'):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            # Skip caching if Redis is not available
+            if not redis_available:
+                return f(*args, **kwargs)
+            
             # Skip caching for non-GET methods usually, but user might want it
             if request.method != 'GET':
                 return f(*args, **kwargs)

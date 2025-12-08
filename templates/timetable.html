@@ -65,6 +65,28 @@
             <h2 class="page-title"><i class="bi bi-calendar-week"></i> Timetable</h2>
             <div>
                 {% if user.role == 'admin' %}
+                <!-- Generation Filters -->
+                <div class="d-inline-flex gap-2 me-2 align-items-center">
+                    <label class="form-label mb-0 small text-muted">Filter Generation:</label>
+                    <select class="form-select form-select-sm" id="filterProgram" style="width: 150px;">
+                        <option value="">All Programs</option>
+                        {% for program in programs %}
+                        <option value="{{ program }}">{{ program }}</option>
+                        {% endfor %}
+                    </select>
+                    <select class="form-select form-select-sm" id="filterBranch" style="width: 150px;">
+                        <option value="">All Branches</option>
+                        {% for branch in branches %}
+                        <option value="{{ branch }}">{{ branch }}</option>
+                        {% endfor %}
+                    </select>
+                    <select class="form-select form-select-sm" id="filterSemester" style="width: 120px;">
+                        <option value="">All Semesters</option>
+                        {% for semester in semesters %}
+                        <option value="{{ semester }}">Semester {{ semester }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <button class="btn btn-success me-2" onclick="generateTimetable(event)">
                     <i class="bi bi-magic"></i> Generate Timetable
                 </button>
@@ -357,7 +379,23 @@
     });
 
     function generateTimetable(evt) {
-        if (!confirm('Generate a new intelligent timetable?\n\n✓ Automatic workload management\n✓ Lab priority allocation\n✓ Faculty availability respect\n✓ Smart lecture scheduling\n✓ Overwork detection\n\nExisting timetable will be replaced. Continue?')) {
+        // Capture filter values
+        const program = document.getElementById('filterProgram')?.value || '';
+        const branch = document.getElementById('filterBranch')?.value || '';
+        const semester = document.getElementById('filterSemester')?.value || '';
+
+        // Build filter description for confirmation
+        let filterDesc = '';
+        if (program || branch || semester) {
+            filterDesc = '\n\nFilters:';
+            if (program) filterDesc += `\n• Program: ${program}`;
+            if (branch) filterDesc += `\n• Branch: ${branch}`;
+            if (semester) filterDesc += `\n• Semester: ${semester}`;
+        } else {
+            filterDesc = '\n\n(Generating for ALL programs, branches, and semesters)';
+        }
+
+        if (!confirm('Generate a new intelligent timetable?' + filterDesc + '\n\n✓ Automatic workload management\n✓ Lab priority allocation\n✓ Faculty availability respect\n✓ Smart lecture scheduling\n✓ Overwork detection\n\nExisting timetable entries for the selected filters will be replaced. Continue?')) {
             return;
         }
 
@@ -368,9 +406,16 @@
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
         }
 
+        // Build request payload with filters
+        const payload = {};
+        if (program) payload.program = program;
+        if (branch) payload.branch = branch;
+        if (semester) payload.semester = parseInt(semester);
+
         fetch('/timetable/generate', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         })
             .then(response => {
                 // Check if it's a JSON response

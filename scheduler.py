@@ -45,9 +45,13 @@ class TimetableGenerator:
     9. Overwork detection & alerts (40+ hours/week warning)
     """
 
-    def __init__(self, db_session, random_seed: int | None = None, config: dict = None):
+    def __init__(self, db_session, random_seed: int | None = None, config: dict = None, courses=None, groups=None):
         self.db = db_session
         self.random = random.Random(random_seed or random.randint(1, 999_999))
+        
+        # Store pre-filtered data if provided
+        self.courses = courses  # Optional: pre-filtered course list
+        self.student_groups = groups  # Optional: pre-filtered student group list
         
         # Enhanced configuration options
         self.config = config or {}
@@ -116,24 +120,35 @@ class TimetableGenerator:
     # --------------------------------------------------------------------- #
     def _load_context(self, filters=None):
         filters = filters or {}
-        course_query = Course.query
-        group_query = StudentGroup.query
         
-        if filters.get('program'):
-            course_query = course_query.filter_by(program=filters['program'])
-            group_query = group_query.filter_by(program=filters['program'])
+        # Use pre-filtered data if provided in __init__, otherwise query from DB
+        if self.courses is not None:
+            courses = self.courses
+        else:
+            course_query = Course.query
+            if filters.get('program'):
+                course_query = course_query.filter_by(program=filters['program'])
+            if filters.get('semester'):
+                try:
+                    sem = int(filters['semester'])
+                    course_query = course_query.filter_by(semester=sem)
+                except (ValueError, TypeError):
+                    pass
+            courses = course_query.all()
         
-        if filters.get('semester'):
-            # Ensure integer semester
-            try:
-                sem = int(filters['semester'])
-                course_query = course_query.filter_by(semester=sem)
-                group_query = group_query.filter_by(semester=sem)
-            except (ValueError, TypeError):
-                pass
-
-        courses = course_query.all()
-        student_groups = group_query.all()
+        if self.student_groups is not None:
+            student_groups = self.student_groups
+        else:
+            group_query = StudentGroup.query
+            if filters.get('program'):
+                group_query = group_query.filter_by(program=filters['program'])
+            if filters.get('semester'):
+                try:
+                    sem = int(filters['semester'])
+                    group_query = group_query.filter_by(semester=sem)
+                except (ValueError, TypeError):
+                    pass
+            student_groups = group_query.all()
         
         faculty = Faculty.query.all()
         rooms = Room.query.all()
@@ -278,14 +293,59 @@ class TimetableGenerator:
         return capability_map
 
     def _eligible_groups_for_course(self, course: Course, groups: List[StudentGroup]):
-        if not course.branch:
+        """
+        Determines which student groups should take a specific course.
+        Enforces strict hierarchy: Program -> Branch -> Semester.
+        """
+        eligible = []
+        
+        # Check if we should apply strict filtering
+        has_constraints = (
+            getattr(course, 'program', None) or 
+            getattr(course, 'semester', None) or 
+            getattr(course, 'branch', None)
+        )
+        
+        # If no constraints on course, maybe it's common? 
+        # But usually courses have at least a branch or semester.
+        # If absolutely no metadata, falling back to all groups might be intended (e.g. "General Assembly")
+        if not has_constraints:
             return groups
-        branch = course.branch.lower()
-        eligible = [
-            group for group in groups
-            if branch in group.name.lower() or (group.description and branch in group.description.lower())
-        ]
-        return eligible or groups
+
+        for group in groups:
+            # 1. Program Match
+            c_prog = getattr(course, 'program', None)
+            g_prog = getattr(group, 'program', None)
+            if c_prog and g_prog:
+                if c_prog.strip().lower() != g_prog.strip().lower():
+                    continue
+            
+            # 2. Semester Match (Strict)
+            c_sem = getattr(course, 'semester', None)
+            g_sem = getattr(group, 'semester', None)
+            if c_sem is not None:
+                # If course has semester, group MUST have matching semester
+                if g_sem is None or int(c_sem) != int(g_sem):
+                    continue
+            
+            # 3. Branch Match
+            if course.branch:
+                c_branch = course.branch.strip().lower()
+                g_branch = getattr(group, 'branch', '')
+                
+                # If group, has explicit branch, use it
+                if g_branch:
+                    if c_branch != g_branch.strip().lower():
+                        continue
+                else:
+                    # Fallback: check if branch name is in group name/description
+                    # (Legacy support for groups created before branch field)
+                    if c_branch not in group.name.lower() and c_branch not in (group.description or '').lower():
+                        continue
+            
+            eligible.append(group)
+        
+        return eligible
 
     def _build_sessions(self, courses: List[Course], groups: List[StudentGroup]):
         sessions = []
@@ -706,6 +766,10 @@ class TimetableGenerator:
         room_conflicts = set()
         group_conflicts = set()
 
+        # Build student group lookup for semester validation
+        group_by_name = {g.name: g for g in context["student_groups"]}
+        course_by_id = context["course_by_id"]
+
         for assignment in assignments:
             faculty_hours[assignment["faculty_id"]] += 1
             slot = slot_lookup[assignment["slot_id"]]
@@ -722,6 +786,24 @@ class TimetableGenerator:
             faculty_conflicts.add(faculty_key)
             room_conflicts.add(room_key)
             group_conflicts.add(group_key)
+            
+            # CRITICAL CONSTRAINT: Semester Matching Validation
+            # This ensures courses are NEVER assigned to wrong semester groups
+            course = course_by_id.get(assignment["course_id"])
+            group = group_by_name.get(assignment["group"])
+            
+            if course and group:
+                c_sem = getattr(course, 'semester', None)
+                g_sem = getattr(group, 'semester', None)
+                
+                # If both course and group have semester defined, they MUST match
+                # Exception: semester 0 or None means "open to all"
+                if c_sem is not None and c_sem != 0 and g_sem is not None:
+                    if int(c_sem) != int(g_sem):
+                        # MASSIVE PENALTY - This should never happen
+                        # This is a hard constraint violation
+                        penalty += 10000
+                        print(f"[CONSTRAINT VIOLATION] Course {course.code} (Semester {c_sem}) assigned to Group {group.name} (Semester {g_sem})")
 
         # Constraint 1: Workload bounds penalty
         for faculty in context["faculty"]:

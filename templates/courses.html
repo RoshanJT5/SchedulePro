@@ -1,199 +1,380 @@
 {% extends "base.html" %}
 
-{% block title %}Courses - Plansphere.ai{% endblock %}
+{% block title %}Manage Courses - Plansphere.ai{% endblock %}
 
 {% block content %}
 <style>
-    /* Courses page enhancements */
+    /* Modern Branch-Based Course Management */
     .page-header {
-        animation: fadeIn 0.5s ease;
+        margin-bottom: 2rem;
     }
 
-    .btn-group {
-        gap: 0.5rem;
+    .search-filter-bar {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
 
-    @media (max-width: 767px) {
-        .btn-group {
-            flex-direction: column;
-            width: 100%;
-        }
-
-        .btn-group .btn,
-        .btn-group .dropdown {
-            width: 100%;
-        }
-
-        .btn-group .dropdown-toggle {
-            width: 100%;
-        }
+    .search-bar {
+        position: relative;
     }
 
-    .table-responsive {
-        animation: slideUp 0.6s ease;
+    .search-bar i {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
     }
 
-    tbody tr {
-        animation: fadeIn 0.4s ease forwards;
-        animation-delay: calc(var(--row-index) * 0.05s);
+    .search-bar input {
+        padding-left: 2.5rem;
+    }
+
+    .branch-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .branch-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+    }
+
+    .branch-icon {
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.75rem;
+        flex-shrink: 0;
+    }
+
+    .branch-info h5 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        color: #2c3e50;
+    }
+
+    .branch-info p {
+        margin: 0;
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+
+    .delete-branch-btn {
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .branch-card:hover .delete-branch-btn {
+        opacity: 1;
+    }
+
+    /* Branch Detail Modal */
+    .branch-modal .modal-dialog {
+        max-width: 900px;
+    }
+
+    .semester-sidebar {
+        border-right: 1px solid #e9ecef;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+
+    .semester-item {
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        transition: background 0.2s;
+        border-left: 3px solid transparent;
+    }
+
+    .semester-item:hover {
+        background: #f8f9fa;
+    }
+
+    .semester-item.active {
+        background: #e7f3ff;
+        border-left-color: #667eea;
+        font-weight: 600;
+    }
+
+    .subjects-table {
+        font-size: 0.95rem;
+    }
+
+    .subjects-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+        padding: 0.75rem;
+    }
+
+    .subjects-table td {
+        padding: 0.75rem;
+        vertical-align: middle;
+    }
+
+    .delete-subject-btn {
+        color: #dc3545;
+        cursor: pointer;
+    }
+
+    .delete-subject-btn:hover {
+        text-decoration: underline;
     }
 </style>
-<div class="row">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="gradient-text"><i class="bi bi-book"></i> Course Management</h2>
-            {% if user.role == 'admin' %}
-            <div class="d-flex flex-wrap gap-2">
-                <div class="dropdown">
-                    <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"
-                        aria-expanded="false">
-                        <i class="bi bi-download"></i> Download Template
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="/download-template/courses?format=csv">CSV</a></li>
-                        <li><a class="dropdown-item" href="/download-template/courses?format=xlsx">Excel (.xlsx)</a>
-                        </li>
-                    </ul>
+
+<div class="container-fluid px-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center page-header">
+        <div>
+            <h2 class="gradient-text mb-1"><i class="bi bi-book"></i> Manage Courses</h2>
+            <p class="text-muted mb-0">Add, edit, and organize all available degree programs and branches.</p>
+        </div>
+        {% if user.role == 'admin' %}
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBranchModal">
+            <i class="bi bi-plus-circle"></i> Add Course/Branch
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="search-filter-bar">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <div class="search-bar">
+                    <i class="bi bi-search"></i>
+                    <input type="text" class="form-control" id="searchInput"
+                        placeholder="Search by branch or course code..." onkeyup="filterBranches()">
                 </div>
-                <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importCourseModal">
-                    <i class="bi bi-upload"></i> Import CSV/Excel
-                </button>
-                <button class="btn btn-outline-danger" onclick="deleteAllCourses(event)">
-                    <i class="bi bi-trash"></i> Delete All
-                </button>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCourseModal">
-                    <i class="bi bi-plus-circle"></i> Add Course
-                </button>
             </div>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-body">
-                <table class="table table-striped table-hover">
-                    <thead>
-                        <tr>
-                            <th>Code</th>
-                            <th>Name</th>
-                            <th>Credits</th>
-                            <th>Type</th>
-                            <th>Hours/Week</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for course in courses %}
-                        <tr>
-                            <td><strong>{{ course.code }}</strong></td>
-                            <td>{{ course.name }}</td>
-                            <td>{{ course.credits }}</td>
-                            <td><span
-                                    class="badge bg-{{ 'warning' if course.course_type == 'practical' else 'info' }}">{{
-                                    course.course_type }}</span></td>
-                            <td>{{ course.hours_per_week }}</td>
-                            <td>
-                                {% if user.role == 'admin' %}
-                                <button class="btn btn-sm btn-danger" onclick="deleteCourse({{ course.id }})">
-                                    <i class="bi bi-trash"></i> Delete
-                                </button>
-                                {% else %}
-                                <span class="text-muted">View Only</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="6" class="text-center text-muted">No courses added yet. Click "Add Course" to
-                                get started.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="col-md-4">
+                <select class="form-select" id="degreeFilter" onchange="filterBranches()">
+                    <option value="">Filter by Degree</option>
+                    <option value="B.Tech">Bachelor of Technology (B.Tech)</option>
+                    <option value="M.Tech">Master of Technology (M.Tech)</option>
+                    <option value="BCA">Bachelor of Computer Applications (BCA)</option>
+                    <option value="MCA">Master of Computer Applications (MCA)</option>
+                </select>
             </div>
         </div>
     </div>
+
+    <!-- Branches List -->
+    {% if branches %}
+    <!-- Group branches by program -->
+    {% set programs_dict = {} %}
+    {% for branch in branches %}
+    {% set program = branch.program or 'Uncategorized' %}
+    {% if program not in programs_dict %}
+    {% set _ = programs_dict.update({program: []}) %}
+    {% endif %}
+    {% set _ = programs_dict[program].append(branch) %}
+    {% endfor %}
+
+    {% for program, program_branches in programs_dict.items() %}
+    <div class="program-section" data-program="{{ program }}">
+        <h4 class="mb-3">{{ program }}</h4>
+
+        <div class="row">
+            {% for branch in program_branches %}
+            <div class="col-md-6 col-lg-4 branch-container" data-branch-code="{{ branch.code }}">
+                <div class="branch-card" onclick="openBranchModal('{{ branch.code }}')">
+                    <div class="d-flex align-items-start justify-content-between">
+                        <div class="d-flex align-items-center flex-grow-1">
+                            <div class="branch-icon me-3">
+                                <i class="bi bi-laptop"></i>
+                            </div>
+                            <div class="branch-info">
+                                <h5>{{ branch.name }}</h5>
+                                <p>{{ branch.code }}</p>
+                                <p class="text-muted">{{ branch.duration_years }}-Year Program</p>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            {% if branch.hod_name %}
+                            <small class="text-muted d-block">HOD: {{ branch.hod_name }}</small>
+                            {% endif %}
+                            <small class="text-muted d-block"><strong>{{ branch.total_semesters }}
+                                    Semesters</strong></small>
+                            {% if user.role == 'admin' %}
+                            <button class="btn btn-sm btn-link text-danger delete-branch-btn p-0 mt-1"
+                                onclick="event.stopPropagation(); deleteBranch('{{ branch.code }}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No branches added yet. Click "Add Course/Branch" to create your first branch.
+    </div>
+    {% endif %}
 </div>
 
-<!-- Add Course Modal -->
-<div class="modal fade" id="addCourseModal" tabindex="-1">
+<!-- Add Branch Modal -->
+<div class="modal fade" id="addBranchModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add New Course</h5>
+                <h5 class="modal-title">Add New Course/Branch</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="addCourseForm">
+                <form id="addBranchForm">
                     <div class="mb-3">
-                        <label class="form-label">Course Code *</label>
-                        <input type="text" class="form-control" name="code" required>
+                        <label class="form-label">Degree Program *</label>
+                        <select class="form-select" name="program" required>
+                            <option value="">Select Program</option>
+                            <option value="B.Tech">B.Tech</option>
+                            <option value="M.Tech">M.Tech</option>
+                            <option value="BCA">BCA</option>
+                            <option value="MCA">MCA</option>
+                        </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Course Name *</label>
-                        <input type="text" class="form-control" name="name" required>
+                        <label class="form-label">Branch Name *</label>
+                        <input type="text" class="form-control" name="name" placeholder="e.g., Computer Science"
+                            required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Credits *</label>
-                        <input type="number" class="form-control" name="credits" min="1" required>
+                        <label class="form-label">Branch Code *</label>
+                        <input type="text" class="form-control" name="code" placeholder="e.g., CSE" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Course Type *</label>
+                        <label class="form-label">HOD Name</label>
+                        <input type="text" class="form-control" name="hod_name" placeholder="e.g., Dr. Smith">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Duration (Years) *</label>
+                            <input type="number" class="form-control" name="duration_years" value="4" min="1" max="10"
+                                required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Total Semesters *</label>
+                            <input type="number" class="form-control" name="total_semesters" value="8" min="1" max="20"
+                                required>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitBranch()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Branch Detail Modal -->
+<div class="modal fade branch-modal" id="branchDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="branchDetailTitle">Branch Name</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="row g-0">
+                    <!-- Semester Sidebar -->
+                    <div class="col-md-3 semester-sidebar">
+                        <div id="semesterList">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- Subjects Area -->
+                    <div class="col-md-9 p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 id="selectedSemesterTitle">Semester 1</h6>
+                            {% if user.role == 'admin' %}
+                            <button class="btn btn-sm btn-primary" onclick="openAddSubjectModal()">
+                                <i class="bi bi-plus"></i> Add Subject
+                            </button>
+                            {% endif %}
+                        </div>
+
+                        <table class="table table-hover subjects-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Subject Name</th>
+                                    <th>Type</th>
+                                    <th>Credits</th>
+                                    {% if user.role == 'admin' %}
+                                    <th></th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody id="subjectsTableBody">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Subject Modal -->
+<div class="modal fade" id="addSubjectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Subject</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addSubjectForm">
+                    <div class="mb-3">
+                        <label class="form-label">Subject Name *</label>
+                        <input type="text" class="form-control" name="name" placeholder="e.g., Data Structures"
+                            required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Subject Code *</label>
+                        <input type="text" class="form-control" name="code" placeholder="e.g., CS101" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type *</label>
                         <select class="form-select" name="type" required>
                             <option value="theory">Theory</option>
                             <option value="practical">Practical</option>
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Hours Per Week *</label>
-                        <input type="number" class="form-control" name="hours_per_week" min="1" required>
+                        <label class="form-label">Credits *</label>
+                        <input type="number" class="form-control" name="credits" value="3" min="1" max="10" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Branch / Program Tag</label>
-                        <small class="text-muted d-block mb-1">Use to bind courses to specific classes (e.g., CSE,
-                            ECE).</small>
-                        <input type="text" class="form-control" name="branch" placeholder="e.g., CSE">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Required Lab Tags</label>
-                        <small class="text-muted d-block mb-1">Comma-separated lab specialties (e.g., computer, iot,
-                            physics).</small>
-                        <input type="text" class="form-control" name="required_room_tags" placeholder="computer, iot">
+                        <label class="form-label">Hours Per Week</label>
+                        <input type="number" class="form-control" name="hours_per_week" value="3" min="1" max="10">
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitCourse()">Add Course</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Import Modal -->
-<div class="modal fade" id="importCourseModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Import Courses</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="importCourseForm">
-                    <div class="mb-3">
-                        <label class="form-label">CSV/Excel File *</label>
-                        <input type="file" class="form-control" name="file" accept=".csv,.xls,.xlsx" required>
-                    </div>
-                    <p class="text-muted small mb-0">Required columns: code, name, credits, hours_per_week. Optional:
-                        course_type/type, branch, required_room_tags.</p>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="importCourses()">Import</button>
+                <button type="button" class="btn btn-primary" onclick="submitSubject()">Add Subject</button>
             </div>
         </div>
     </div>
@@ -202,12 +383,48 @@
 
 {% block scripts %}
 <script>
-    function submitCourse() {
-        const form = document.getElementById('addCourseForm');
+    let currentBranchCode = null;
+    let currentSemester = 1;
+    let branchData = {{ branch_structure| tojson | safe }};
+
+    // Filter branches
+    function filterBranches() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const degreeFilter = document.getElementById('degreeFilter').value;
+
+        document.querySelectorAll('.program-section').forEach(section => {
+            const program = section.getAttribute('data-program');
+            let sectionVisible = false;
+
+            // Check degree filter
+            if (degreeFilter && program !== degreeFilter) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.querySelectorAll('.branch-container').forEach(container => {
+                const branchCode = container.getAttribute('data-branch-code');
+                const branchText = container.textContent.toLowerCase();
+
+                if (searchTerm === '' || branchText.includes(searchTerm)) {
+                    container.style.display = 'block';
+                    sectionVisible = true;
+                } else {
+                    container.style.display = 'none';
+                }
+            });
+
+            section.style.display = sectionVisible ? 'block' : 'none';
+        });
+    }
+
+    // Submit new branch
+    function submitBranch() {
+        const form = document.getElementById('addBranchForm');
         const formData = new FormData(form);
         const data = Object.fromEntries(formData);
 
-        fetch('/courses/add', {
+        fetch('/branches/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
@@ -215,81 +432,163 @@
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    UI.showToast('Course added successfully', 'success');
+                    UI.showToast('Branch created successfully', 'success');
                     setTimeout(() => location.reload(), 1000);
                 } else {
-                    UI.showToast('Error: ' + (data.error || 'Failed to add course'), 'error');
+                    UI.showToast('Error: ' + (data.error || 'Failed to create branch'), 'error');
                 }
             });
     }
 
-    function deleteCourse(id) {
-        UI.confirm('Are you sure you want to delete this course?', () => {
-            fetch(`/courses/${id}/delete`, { method: 'POST' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        UI.showToast('Course deleted', 'success');
-                        setTimeout(() => location.reload(), 1000);
-                    } else {
-                        UI.showToast('Error deleting course', 'error');
-                    }
-                });
-        });
-    }
+    // Delete branch
+    function deleteBranch(branchCode) {
+        if (!confirm('Are you sure you want to delete this branch and all its subjects?')) return;
 
-    function importCourses() {
-        const form = document.getElementById('importCourseForm');
-        const formData = new FormData(form);
-        // Modal will be closed automatically by bootstrap if we reload, 
-        // but let's hide it manually if we want to show toast first
-        const modal = bootstrap.Modal.getInstance(document.getElementById('importCourseModal'));
-        modal.hide();
-
-        fetch('/courses/import', {
-            method: 'POST',
-            body: formData
+        fetch(`/branches/${branchCode}/delete`, {
+            method: 'POST'
         })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    UI.showToast('Courses imported successfully', 'success');
+                    UI.showToast('Branch deleted successfully', 'success');
                     setTimeout(() => location.reload(), 1000);
                 } else {
-                    UI.showToast('Import failed: ' + (data.error || 'Unknown error'), 'error');
+                    UI.showToast('Error: ' + (data.error || 'Failed to delete branch'), 'error');
                 }
             });
     }
 
-    function deleteAllCourses(event) {
-        event.preventDefault();
-        UI.confirm('Are you sure you want to delete ALL courses? This cannot be undone.', () => {
-            const btn = event.target.closest('button');
-            const originalHTML = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
+    // Open branch detail modal
+    function openBranchModal(branchCode) {
+        currentBranchCode = branchCode;
+        currentSemester = 1;
 
-            fetch('/courses/delete-all', { method: 'POST' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        UI.showToast(`Deleted ${data.deleted} courses`, 'success');
-                        // Remove rows from DOM immediately
-                        document.querySelector('tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted">No courses added yet. Click "Add Course" to get started.</td></tr>';
-                        btn.disabled = false;
-                        btn.innerHTML = originalHTML;
-                    } else {
-                        btn.disabled = false;
-                        btn.innerHTML = originalHTML;
-                        UI.showToast('Error: ' + data.error, 'error');
-                    }
-                })
-                .catch(err => {
-                    btn.disabled = false;
-                    btn.innerHTML = originalHTML;
-                    UI.showToast('Error: ' + err, 'error');
-                });
+        const structure = branchData[branchCode];
+        if (!structure) {
+            UI.showToast('Branch data not found', 'error');
+            return;
+        }
+
+        const branch = structure.branch;
+
+        // Update modal title
+        document.getElementById('branchDetailTitle').textContent =
+            `${branch.name} (${branch.program})`;
+
+        // Build semester list
+        let semesterHTML = '';
+        for (let i = 1; i <= branch.total_semesters; i++) {
+            semesterHTML += `
+                <div class="semester-item ${i === 1 ? 'active' : ''}" 
+                     onclick="selectSemester(${i})">
+                    Semester ${i}
+                </div>
+            `;
+        }
+        document.getElementById('semesterList').innerHTML = semesterHTML;
+
+        // Load first semester
+        loadSemesterSubjects(1);
+
+        // Show modal
+        new bootstrap.Modal(document.getElementById('branchDetailModal')).show();
+    }
+
+    // Select semester
+    function selectSemester(semester) {
+        currentSemester = semester;
+
+        // Update active state
+        document.querySelectorAll('.semester-item').forEach(item => {
+            item.classList.remove('active');
         });
+        event.target.classList.add('active');
+
+        // Update title
+        document.getElementById('selectedSemesterTitle').textContent = `Semester ${semester}`;
+
+        // Load subjects
+        loadSemesterSubjects(semester);
+    }
+
+    // Load subjects for semester
+    function loadSemesterSubjects(semester) {
+        const structure = branchData[currentBranchCode];
+        const subjects = structure.subjects_by_semester[semester] || [];
+
+        let html = '';
+        if (subjects.length === 0) {
+            html = '<tr><td colspan="5" class="text-center text-muted">No subjects added yet</td></tr>';
+        } else {
+            subjects.forEach(subject => {
+                html += `
+                    <tr>
+                        <td><strong>${subject.code}</strong></td>
+                        <td>${subject.name}</td>
+                        <td><span class="badge ${subject.course_type === 'practical' ? 'bg-warning' : 'bg-info'}">${subject.course_type}</span></td>
+                        <td>${subject.credits || '-'}</td>
+                        {% if user.role == 'admin' %}
+                        <td>
+                            <span class="delete-subject-btn" onclick="deleteSubject(${subject.id})">Delete</span>
+                        </td>
+                        {% endif %}
+                    </tr>
+                `;
+            });
+        }
+
+        document.getElementById('subjectsTableBody').innerHTML = html;
+    }
+
+    // Open add subject modal
+    function openAddSubjectModal() {
+        // Close branch detail modal temporarily
+        bootstrap.Modal.getInstance(document.getElementById('branchDetailModal')).hide();
+
+        // Show add subject modal
+        new bootstrap.Modal(document.getElementById('addSubjectModal')).show();
+    }
+
+    // Submit new subject
+    function submitSubject() {
+        const form = document.getElementById('addSubjectForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData);
+        data.semester = currentSemester;
+
+        fetch(`/branches/${currentBranchCode}/subjects/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    UI.showToast('Subject added successfully', 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('addSubjectModal')).hide();
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    UI.showToast('Error: ' + (data.error || 'Failed to add subject'), 'error');
+                }
+            });
+    }
+
+    // Delete subject
+    function deleteSubject(subjectId) {
+        if (!confirm('Are you sure you want to delete this subject?')) return;
+
+        fetch(`/branches/${currentBranchCode}/subjects/${subjectId}/delete`, {
+            method: 'POST'
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    UI.showToast('Subject deleted successfully', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    UI.showToast('Error: ' + (data.error || 'Failed to delete subject'), 'error');
+                }
+            });
     }
 </script>
 {% endblock %}
