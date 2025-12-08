@@ -356,9 +356,11 @@ def generate_timetable_task(self, filters=None):
                 except: pass
             
             groups = target_groups.all()
-            # Delete entries for these groups
-            for group in groups:
-                 TimetableEntry.query.filter_by(student_group=group.name).delete()
+            # OPTIMIZATION: Bulk delete using $in operator (single query instead of N queries)
+            if groups:
+                group_names = [group.name for group in groups]
+                # Use MongoDB's native delete_many with $in operator
+                db._db['timetableentry'].delete_many({'student_group': {'$in': group_names}})
         else:
             # Full deletion
             TimetableEntry.query.delete()
@@ -393,7 +395,16 @@ def generate_timetable_task(self, filters=None):
             target_groups = group_query.all()
         
         # Generate new timetable
-        generator = TimetableGenerator(db, courses=target_courses, groups=target_groups)
+        print(f"[GENERATE_TASK] Using {len(target_courses) if target_courses else 0} courses and {len(target_groups) if target_groups else 0} groups")
+        if target_groups:
+            print(f"[GENERATE_TASK] Group names: {[g.name for g in target_groups]}")
+        generator = TimetableGenerator(db, courses=target_courses, groups=target_groups, config={
+            'verbose': True,  # Enable for performance logging
+            'ultra_fast': True,  # CRITICAL: Enable greedy-first strategy
+            'skip_faculty_schedules': True,  # Skip faculty schedules generation for speed
+            'skip_overwork_check': False,  # Keep overwork check but make it fast
+            'greedy_success_threshold': 0.7  # Accept greedy if >=70% placement rate
+        })
         result = generator.generate(filters or {})
         
         return result
@@ -2102,8 +2113,16 @@ def delete_all_student_groups():
 # Timetable Generation
 @app.route('/timetable')
 @login_required
-@cache_response(ttl=300, prefix='timetable_view')
 def timetable():
+    import time as time_module
+    view_start = time_module.time()
+    
+    # Disable caching - always show fresh data after generation
+    response = make_response()
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
     user = get_current_user()
     entries_query = TimetableEntry.query
     faculty_profile = None
@@ -2113,20 +2132,32 @@ def timetable():
             entries_query = entries_query.filter_by(faculty_id=faculty_profile.id)
         else:
             entries_query = entries_query.filter_by(faculty_id=-1)
+    
+    # OPTIMIZATION: Load time slots first (usually < 100 records)
     slots = TimeSlot.query.all()
     slots_dict = {s.id: s for s in slots}
     valid_slot_ids = set(slots_dict.keys())
-
+    
+    # Fetch all entries (MongoDB Query doesn't support SQLAlchemy-style filter)
+    all_entries = entries_query.all()
+    
     # Filter entries to only include those with valid time_slot_id
-    entries = [e for e in entries_query.all() if e.time_slot_id in valid_slot_ids]
+    entries = [e for e in all_entries if e.time_slot_id in valid_slot_ids]
     
     print(f"[TIMETABLE VIEW] Loading timetable for user: {user.username} (role: {user.role})")
-    print(f"[TIMETABLE VIEW] Found {len(entries)} timetable entries")
+    print(f"[TIMETABLE VIEW] Total entries in DB: {len(all_entries)}")
+    print(f"[TIMETABLE VIEW] Entries with valid slots: {len(entries)}")
     print(f"[TIMETABLE VIEW] Found {len(slots)} time slots")
 
-    courses_dict = {c.id: c for c in Course.query.all()}
-    faculty_dict = {f.id: f for f in Faculty.query.all()}
-    rooms_dict = {r.id: r for r in Room.query.all()}
+    # OPTIMIZATION: Build dictionaries directly without fetching all if no entries
+    if entries:
+        courses_dict = {c.id: c for c in Course.query.all()}
+        faculty_dict = {f.id: f for f in Faculty.query.all()}
+        rooms_dict = {r.id: r for r in Room.query.all()}
+    else:
+        courses_dict = {}
+        faculty_dict = {}
+        rooms_dict = {}
     
     # Get break configurations
     breaks = BreakConfig.query.order_by(BreakConfig.after_period).all()
@@ -2134,18 +2165,47 @@ def timetable():
     
     # Organize by day and period (one lecture per period per class is enforced by unique constraint)
     timetable_data = {}
+    missing_refs = {'courses': set(), 'faculty': set(), 'rooms': set()}
+    
     for entry in entries:
+        # Skip entries with invalid time_slot_id
+        if entry.time_slot_id not in slots_dict:
+            print(f"[TIMETABLE VIEW] WARNING: Entry {entry.id} has invalid time_slot_id: {entry.time_slot_id}")
+            continue
+            
         slot = slots_dict[entry.time_slot_id]
         key = (slot.day, slot.period)
-        if key not in timetable_data:
-            timetable_data[key] = []
-        timetable_data[key].append({
-            'course': courses_dict[entry.course_id],
-            'faculty': faculty_dict[entry.faculty_id],
-            'room': rooms_dict[entry.room_id],
-            'slot': slot,
-            'student_group': entry.student_group
-        })
+        
+        # Check if all references exist
+        course = courses_dict.get(entry.course_id)
+        faculty = faculty_dict.get(entry.faculty_id)
+        room = rooms_dict.get(entry.room_id)
+        
+        if not course:
+            missing_refs['courses'].add(entry.course_id)
+            print(f"[TIMETABLE VIEW] WARNING: Entry {entry.id} references missing course_id: {entry.course_id}")
+        if not faculty:
+            missing_refs['faculty'].add(entry.faculty_id)
+            print(f"[TIMETABLE VIEW] WARNING: Entry {entry.id} references missing faculty_id: {entry.faculty_id}")
+        if not room:
+            missing_refs['rooms'].add(entry.room_id)
+            print(f"[TIMETABLE VIEW] WARNING: Entry {entry.id} references missing room_id: {entry.room_id}")
+        
+        # Only add entry if all required references exist
+        if course and faculty and room:
+            if key not in timetable_data:
+                timetable_data[key] = []
+            timetable_data[key].append({
+                'course': course,
+                'faculty': faculty,
+                'room': room,
+                'slot': slot,
+                'student_group': entry.student_group
+            })
+    
+    # Log missing references summary
+    if missing_refs['courses'] or missing_refs['faculty'] or missing_refs['rooms']:
+        print(f"[TIMETABLE VIEW] Missing references - Courses: {missing_refs['courses']}, Faculty: {missing_refs['faculty']}, Rooms: {missing_refs['rooms']}")
     
     # Get days from period config or default
     period_config = PeriodConfig.query.first()
@@ -2154,7 +2214,11 @@ def timetable():
     else:
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
     
-    periods = sorted(set(s.period for s in TimeSlot.query.all()))
+    # OPTIMIZATION: Use already loaded slots instead of re-querying
+    periods = sorted(set(s.period for s in slots))
+    
+    view_time = time_module.time() - view_start
+    print(f"[TIMETABLE VIEW] Loaded {len(entries)} entries in {view_time:.2f}s")
     
     teacher_availability = {}
     if faculty_profile and faculty_profile.availability:
@@ -2330,19 +2394,41 @@ def generate_timetable():
         if data.get('semester'):
             filters['semester'] = parse_int(data['semester'])
         
-        # Try async generation with Celery (for local development with Redis)
+        # OPTIMIZATION: Fast check if Redis is available (1 second timeout)
+        # Avoids 60+ second timeout when Redis is not running
+        redis_available = False
         try:
-            task = generate_timetable_task.delay(filters)
-            return jsonify({
-                'success': True,
-                'message': 'Timetable generation started in background.',
-                'task_id': task.id
-            }), 202
-        except Exception as celery_error:
-            # Celery not available (e.g., on Vercel) - run synchronously
-            print(f"Celery unavailable ({celery_error}), running synchronously...")
+            import redis as redis_lib
+            r = redis_lib.Redis.from_url(
+                app.config.get('CELERY_BROKER_URL', 'redis://localhost:6379/0'),
+                socket_connect_timeout=1,
+                socket_timeout=1
+            )
+            r.ping()
+            redis_available = True
+        except Exception:
+            redis_available = False
+        
+        # Try async generation with Celery (for local development with Redis)
+        if redis_available:
+            try:
+                task = generate_timetable_task.delay(filters)
+                return jsonify({
+                    'success': True,
+                    'message': 'Timetable generation started in background.',
+                    'task_id': task.id
+                }), 202
+            except Exception as celery_error:
+                print(f"Celery failed ({celery_error}), falling back to synchronous...")
+        
+        # Run synchronously (Celery not available or Redis down)
+        if not redis_available:
+            print(f"Redis not available, running synchronously...")
             
             # Clear existing timetable (selectively or all)
+            import time
+            delete_start = time.time()
+            
             if filters:
                 # Targeted deletion
                 target_groups = StudentGroup.query
@@ -2357,10 +2443,16 @@ def generate_timetable():
                     except: pass
                 
                 groups = target_groups.all()
-                for group in groups:
-                        TimetableEntry.query.filter_by(student_group=group.name).delete()
+                # OPTIMIZATION: Bulk delete using $in operator (single query instead of N queries)
+                if groups:
+                    group_names = [group.name for group in groups]
+                    # Use MongoDB's native delete_many with $in operator
+                    result = db._db['timetableentry'].delete_many({'student_group': {'$in': group_names}})
+                    print(f"[DELETE] Removed {result.deleted_count} entries for {len(group_names)} groups in {time.time() - delete_start:.2f}s")
             else:
-                TimetableEntry.query.delete()
+                # Delete all entries
+                result = db._db['timetableentry'].delete_many({})
+                print(f"[DELETE] Removed all {result.deleted_count} entries in {time.time() - delete_start:.2f}s")
 
             db.session.commit()
             
@@ -2393,17 +2485,46 @@ def generate_timetable():
             
             # Generate new timetable synchronously
             print("[GENERATE] Starting timetable generation...")
-            generator = TimetableGenerator(db, courses=target_courses, groups=target_groups)
+            print(f"[GENERATE] Using {len(target_courses) if target_courses else 0} courses and {len(target_groups) if target_groups else 0} groups")
+            if target_groups:
+                print(f"[GENERATE] Group names: {[g.name for g in target_groups]}")
+            generator = TimetableGenerator(db, courses=target_courses, groups=target_groups, config={
+                'verbose': True,  # Enable for performance logging
+                'ultra_fast': True,  # CRITICAL: Enable greedy-first strategy
+                'skip_faculty_schedules': True,  # Skip faculty schedules generation for speed
+                'skip_overwork_check': False,  # Keep overwork check but make it fast
+                'greedy_success_threshold': 0.7  # Accept greedy if >=70% placement rate
+            })
             result = generator.generate(filters or {})
             
             print(f"[GENERATE] Generation complete. Success: {result.get('success')}")
             print(f"[GENERATE] Entries created: {result.get('entries_created', 0)}")
+            
+            # Print performance metrics if available
+            if result.get('performance'):
+                perf = result['performance']
+                print(f"""
+⏱️ PERFORMANCE REPORT:
+  - Load Time: {perf.get('load_time', 0):.2f}s
+  - Greedy Time: {perf.get('greedy_time', 0):.2f}s
+  - ILP Time: {perf.get('ilp_time', 0):.2f}s
+  - Overwork Check: {perf.get('overwork_time', 0):.2f}s
+  - Persist Time: {perf.get('persist_time', 0):.2f}s
+  - TOTAL: {perf.get('total_time', result.get('generation_time', 0)):.2f}s
+  - Method: {perf.get('method', 'unknown')}
+  - Placement Rate: {perf.get('placement_rate', 0)*100:.1f}%
+""")
+            
             if result.get('error'):
                 print(f"[GENERATE] Error: {result.get('error')}")
             if result.get('warnings'):
                 print(f"[GENERATE] Warnings: {result.get('warnings')}")
             
             if result.get('success'):
+                # Invalidate cache after successful generation
+                invalidate_cache('timetable_view')
+                invalidate_cache('timetable_entries')
+                
                 return jsonify({
                     'success': True,
                     'message': 'Timetable generated successfully!',

@@ -69,6 +69,8 @@ class TimetableGenerator:
     # Public API
     # --------------------------------------------------------------------- #
     def generate(self, filters=None):
+        import time
+        gen_start = time.time()
         context = self._load_context(filters)
         if self.verbose:
             print(f"[GEN] Context: courses={len(context['courses'])}, groups={len(context['student_groups'])}, faculty={len(context['faculty'])}, rooms={len(context['rooms'])}, slots={len(context['time_slots'])}, sessions={len(context['sessions'])}")
@@ -83,39 +85,144 @@ class TimetableGenerator:
 
         # Ultra fast: greedy assignment pipeline
         if self.ultra_fast:
+            load_time = time.time() - gen_start
             greedy_res = self._generate_greedy(context)
-            if not greedy_res["success"]:
-                if self.verbose:
-                    print(f"[GEN] Greedy failed: {greedy_res.get('error')}. Falling back to fast ILP…")
-                # Fallback to fast ILP once
-                ilp_fast = self._solve_with_ilp_fast(context)
-                if not ilp_fast.get('success'):
-                    return greedy_res
-                final_assignments = ilp_fast["assignments"]
-                warnings = greedy_res.get("warnings", []) + ilp_fast.get("warnings", [])
-                overwork_warnings = self._detect_overwork(final_assignments, context)
-                warnings.extend(overwork_warnings)
-                faculty_schedules = self._generate_faculty_schedules(final_assignments, context)
+            greedy_time = greedy_res.get("greedy_time", 0)
+            
+            # OPTIMIZATION: Check placement rate - if greedy places >=70% of sessions, accept it
+            total_sessions = len(context["sessions"])
+            placement_rate = greedy_res.get("placement_rate", 0)
+            greedy_threshold = self.config.get('greedy_success_threshold', 0.7)  # 70% default
+            
+            if greedy_res["success"] and placement_rate >= greedy_threshold:
+                # Greedy succeeded with good placement rate - use it!
+                warnings = greedy_res.get("warnings", [])
+                final_assignments = greedy_res["assignments"]
+                
+                # Skip overwork detection in ultra-fast mode for speed (optional)
+                if not self.config.get('skip_overwork_check', False):
+                    overwork_start = time.time()
+                    overwork_warnings = self._detect_overwork(final_assignments, context)
+                    warnings.extend(overwork_warnings)
+                    overwork_time = time.time() - overwork_start
+                else:
+                    overwork_time = 0
+                
+                # Skip faculty schedules generation for speed (can be generated on-demand)
+                faculty_schedules = {} if self.config.get('skip_faculty_schedules', True) else self._generate_faculty_schedules(final_assignments, context)
+                
+                persist_start = time.time()
                 entries_created = self._persist_assignments(final_assignments, context)
+                persist_time = time.time() - persist_start
+                
+                gen_time = time.time() - gen_start
+                
+                if self.verbose:
+                    print(f"[PERF] Load: {load_time:.2f}s, Greedy: {greedy_time:.2f}s, Overwork: {overwork_time:.2f}s, Persist: {persist_time:.2f}s, Total: {gen_time:.2f}s")
+                
                 return {
                     "success": True,
                     "entries_created": entries_created,
                     "warnings": warnings,
                     "faculty_schedules": faculty_schedules,
-                    "overwork_alerts": [w for w in warnings if "overwork" in w.lower()]
+                    "overwork_alerts": [w for w in warnings if "overwork" in w.lower()],
+                    "generation_time": gen_time,
+                    "performance": {
+                        "load_time": load_time,
+                        "greedy_time": greedy_time,
+                        "overwork_time": overwork_time,
+                        "persist_time": persist_time,
+                        "total_time": gen_time,
+                        "placement_rate": placement_rate,
+                        "method": "greedy"
+                    }
                 }
-            warnings = greedy_res.get("warnings", [])
-            final_assignments = greedy_res["assignments"]
-            overwork_warnings = self._detect_overwork(final_assignments, context)
-            warnings.extend(overwork_warnings)
-            faculty_schedules = self._generate_faculty_schedules(final_assignments, context)
+            elif greedy_res["success"] and placement_rate < greedy_threshold:
+                # Greedy succeeded but low placement rate - fallback to ILP
+                if self.verbose:
+                    print(f"[GEN] Greedy placed {placement_rate*100:.1f}% ({len(greedy_res['assignments'])}/{total_sessions}), falling back to ILP...")
+                ilp_start = time.time()
+                ilp_fast = self._solve_with_ilp_fast(context)
+                ilp_time = time.time() - ilp_start
+                
+                if not ilp_fast.get('success'):
+                    # ILP failed, return greedy result anyway
+                    warnings = greedy_res.get("warnings", [])
+                    final_assignments = greedy_res["assignments"]
+                    persist_start = time.time()
+                    entries_created = self._persist_assignments(final_assignments, context)
+                    persist_time = time.time() - persist_start
+                    gen_time = time.time() - gen_start
+                    return {
+                        "success": True,
+                        "entries_created": entries_created,
+                        "warnings": warnings,
+                        "faculty_schedules": {},
+                        "overwork_alerts": [],
+                        "generation_time": gen_time,
+                        "performance": {
+                            "load_time": load_time,
+                            "greedy_time": greedy_time,
+                            "ilp_time": ilp_time,
+                            "persist_time": persist_time,
+                            "total_time": gen_time,
+                            "placement_rate": placement_rate,
+                            "method": "greedy_fallback"
+                        }
+                    }
+                
+                final_assignments = ilp_fast["assignments"]
+                warnings = greedy_res.get("warnings", []) + ilp_fast.get("warnings", [])
+            else:
+                # Greedy failed completely - fallback to ILP
+                if self.verbose:
+                    print(f"[GEN] Greedy failed: {greedy_res.get('error')}. Falling back to fast ILP…")
+                ilp_start = time.time()
+                ilp_fast = self._solve_with_ilp_fast(context)
+                ilp_time = time.time() - ilp_start
+                
+                if not ilp_fast.get('success'):
+                    return greedy_res
+                
+                final_assignments = ilp_fast["assignments"]
+                warnings = greedy_res.get("warnings", []) + ilp_fast.get("warnings", [])
+            
+            # Process final assignments (from ILP fallback)
+            if not self.config.get('skip_overwork_check', False):
+                overwork_start = time.time()
+                overwork_warnings = self._detect_overwork(final_assignments, context)
+                warnings.extend(overwork_warnings)
+                overwork_time = time.time() - overwork_start
+            else:
+                overwork_time = 0
+            
+            faculty_schedules = {} if self.config.get('skip_faculty_schedules', True) else self._generate_faculty_schedules(final_assignments, context)
+            
+            persist_start = time.time()
             entries_created = self._persist_assignments(final_assignments, context)
+            persist_time = time.time() - persist_start
+            
+            gen_time = time.time() - gen_start
+            
+            if self.verbose:
+                print(f"[PERF] Load: {load_time:.2f}s, Greedy: {greedy_time:.2f}s, ILP: {ilp_time:.2f}s, Overwork: {overwork_time:.2f}s, Persist: {persist_time:.2f}s, Total: {gen_time:.2f}s")
+            
             return {
                 "success": True,
                 "entries_created": entries_created,
                 "warnings": warnings,
                 "faculty_schedules": faculty_schedules,
-                "overwork_alerts": [w for w in warnings if "overwork" in w.lower()]
+                "overwork_alerts": [w for w in warnings if "overwork" in w.lower()],
+                "generation_time": gen_time,
+                "performance": {
+                    "load_time": load_time,
+                    "greedy_time": greedy_time,
+                    "ilp_time": ilp_time if 'ilp_time' in locals() else 0,
+                    "overwork_time": overwork_time,
+                    "persist_time": persist_time,
+                    "total_time": gen_time,
+                    "method": "ilp_fallback"
+                }
             }
 
         # Constraint 1: Validate workload bounds (ILP modes)
@@ -169,7 +276,10 @@ class TimetableGenerator:
         """Very fast heuristic scheduler that assigns sessions greedily.
         Prioritizes labs first, respects faculty availability, group/day max,
         room capabilities, and avoids same-slot conflicts.
+        OPTIMIZED: Uses pre-computed caches, smart slot ordering, early exit.
         """
+        import time
+        greedy_start = time.time()
         warnings = []
         assignments = []
 
@@ -178,10 +288,22 @@ class TimetableGenerator:
         time_slots = context["time_slots"]
         course_by_id = context["course_by_id"]
         rooms = context["rooms"]
-        room_caps = context["room_capabilities"]
         faculty_avail = context["faculty_availability"]
-        expertise_map = context["faculty_expertise"]
         max_per_day = context.get('max_periods_per_day_per_group', 0) or None
+
+        # OPTIMIZATION: Use pre-computed caches (O(1) lookup instead of recomputing)
+        course_faculty_cache = context.get("course_faculty_cache", {})
+        course_room_cache = context.get("course_room_cache", {})
+        
+        # Fallback: compute on-demand if cache not available
+        if not course_faculty_cache or not course_room_cache:
+            expertise_map = context["faculty_expertise"]
+            room_caps = context["room_capabilities"]
+            course_faculty_cache = {}
+            course_room_cache = {}
+            for course in context["courses"]:
+                course_faculty_cache[course.id] = self._faculty_for_course(course, context["faculty"], expertise_map)
+                course_room_cache[course.id] = self._rooms_for_course(course, rooms, room_caps)
 
         # State trackers
         used_faculty_slot = defaultdict(set)    # (faculty_id) -> {slot_id}
@@ -190,8 +312,6 @@ class TimetableGenerator:
         group_day_count = defaultdict(lambda: defaultdict(int))  # group -> day -> count
         faculty_hours = defaultdict(int)
 
-        # Precompute eligible rooms per course id
-        eligible_rooms_cache = {}
         # Index rooms by type for graceful fallbacks
         rooms_by_type = {
             'lab': [r for r in rooms if getattr(r, 'room_type', '') == 'lab'],
@@ -201,13 +321,10 @@ class TimetableGenerator:
         # Sort sessions: labs first, then by course code for stability
         sessions = list(context["sessions"]) or []
         sessions.sort(key=lambda s: (0 if s.is_lab else 1, s.course_code))
-
-        # Precompute faculty candidates per course
-        faculty_for_course_cache = {}
-        def get_faculty_candidates(course):
-            if course.id not in faculty_for_course_cache:
-                faculty_for_course_cache[course.id] = self._faculty_for_course(course, context["faculty"], expertise_map)
-            return faculty_for_course_cache[course.id]
+        
+        # OPTIMIZATION: Smart slot ordering - labs prefer morning, theory prefers afternoon
+        slots_lab_order = sorted(time_slots, key=lambda s: (s.day, s.period))  # Morning first for labs
+        slots_theory_order = sorted(time_slots, key=lambda s: (s.day, -s.period))  # Afternoon first for theory
 
         # Iterate each session and place it
         for session in sessions:
@@ -215,38 +332,33 @@ class TimetableGenerator:
             if not course:
                 continue
 
-            # Faculty candidates respecting expertise and not exceeding max_hours
-            cand_faculty = [f for f in get_faculty_candidates(course) if faculty_hours[f.id] < (f.max_hours_per_week or 16)]
+            # OPTIMIZATION: Use pre-computed cache (O(1) lookup)
+            cand_faculty = course_faculty_cache.get(course.id, [])
+            # Filter by workload
+            cand_faculty = [f for f in cand_faculty if faculty_hours[f.id] < (f.max_hours_per_week or 16)]
             if not cand_faculty:
                 warnings.append(f"⚠️ No eligible faculty for course {course.code}")
                 continue
 
-            # Prefer faculty with lower current hours
+            # Prefer faculty with lower current hours (load balancing)
             cand_faculty.sort(key=lambda f: faculty_hours[f.id])
 
-            # Eligible rooms for course
-            if course.id not in eligible_rooms_cache:
-                eligible_rooms_cache[course.id] = self._rooms_for_course(course, rooms, room_caps)
-            eligible_rooms = eligible_rooms_cache[course.id]
+            # OPTIMIZATION: Use pre-computed room cache (O(1) lookup)
+            eligible_rooms = course_room_cache.get(course.id, [])
             if not eligible_rooms:
-                # Graceful fallback: use room type buckets; if still empty, use any room
+                # Graceful fallback: use room type buckets
                 fallback = rooms_by_type['lab'] if session.is_lab else rooms_by_type['classroom']
                 eligible_rooms = fallback if fallback else rooms
                 if not eligible_rooms:
                     warnings.append(f"⚠️ No rooms available to place course {course.code}")
                     continue
 
+            # OPTIMIZATION: Smart slot ordering based on session type
+            slot_order = slots_lab_order if session.is_lab else slots_theory_order
+            
             placed = False
-            # Iterate slots in time order; optionally cap per-session slots for speed
-            # Consider all slots unless explicitly capped in config
-            slot_cap = self.config.get('max_slots_per_session')
-            if not slot_cap or slot_cap <= 0:
-                slot_cap = len(time_slots)
-            checked = 0
-            for slot in time_slots:
-                if checked >= slot_cap:
-                    break
-                checked += 1
+            # OPTIMIZATION: Early exit - break immediately when placed
+            for slot in slot_order:
                 day = slot.day
                 slot_id = slot.id
 
@@ -256,7 +368,7 @@ class TimetableGenerator:
                 if max_per_day is not None and group_day_count[session.student_group][day] >= max_per_day:
                     continue
 
-                # Try faculty in order
+                # Try faculty in order (already sorted by workload)
                 for fac in cand_faculty:
                     if slot_id not in faculty_avail.get(fac.id, set()):
                         continue
@@ -264,8 +376,8 @@ class TimetableGenerator:
                         continue
 
                     # Find a free eligible room for this slot
-                    room_found = None
                     taken = used_room_slot[slot_id]
+                    room_found = None
                     for r in eligible_rooms:
                         if r.id not in taken:
                             room_found = r
@@ -290,18 +402,31 @@ class TimetableGenerator:
                     group_day_count[session.student_group][day] += 1
                     faculty_hours[fac.id] += 1
                     placed = True
-                    break
+                    break  # OPTIMIZATION: Early exit from faculty loop
 
                 if placed:
-                    break
+                    break  # OPTIMIZATION: Early exit from slot loop
 
             if not placed:
                 warnings.append(f"⚠️ Could not place session for course {course.code} (group {session.student_group})")
 
+        greedy_time = time.time() - greedy_start
+        
         if not assignments:
-            return {"success": False, "error": "Greedy scheduler could not place any sessions.", "warnings": warnings}
+            return {
+                "success": False, 
+                "error": "Greedy scheduler could not place any sessions.", 
+                "warnings": warnings,
+                "greedy_time": greedy_time
+            }
 
-        return {"success": True, "assignments": assignments, "warnings": warnings}
+        return {
+            "success": True, 
+            "assignments": assignments, 
+            "warnings": warnings,
+            "greedy_time": greedy_time,
+            "placement_rate": len(assignments) / len(sessions) if sessions else 0
+        }
 
     # --------------------------------------------------------------------- #
     # Context Preparation
@@ -325,8 +450,12 @@ class TimetableGenerator:
             courses = course_query.all()
         
         if self.student_groups is not None:
+            # Use explicitly provided groups (even if empty list)
             student_groups = self.student_groups
+            if self.verbose:
+                print(f"[LOAD_CONTEXT] Using {len(student_groups)} explicitly provided groups")
         else:
+            # Query groups from database
             group_query = StudentGroup.query
             if filters.get('program'):
                 group_query = group_query.filter_by(program=filters['program'])
@@ -337,6 +466,8 @@ class TimetableGenerator:
                 except (ValueError, TypeError):
                     pass
             student_groups = group_query.all()
+            if self.verbose:
+                print(f"[LOAD_CONTEXT] Queried {len(student_groups)} groups from database")
         
         faculty = Faculty.query.all()
         rooms = Room.query.all()
@@ -349,11 +480,17 @@ class TimetableGenerator:
         else:
             max_per_day_for_group = 0
 
-        if not student_groups:
+        # Only create Default group if no groups exist AND groups were queried (not explicitly provided)
+        if not student_groups and self.student_groups is None:
+            if self.verbose:
+                print("[LOAD_CONTEXT] No groups found, creating Default group")
             default_group = StudentGroup(name="Default", description="Auto-generated group")
             self.db.session.add(default_group)
             self.db.session.commit()
             student_groups = [default_group]
+        elif not student_groups:
+            if self.verbose:
+                print("[LOAD_CONTEXT] WARNING: No groups provided and none found in database!")
 
         slot_by_id = {slot.id: slot for slot in time_slots}
         slots_by_day: Dict[str, List[TimeSlot]] = defaultdict(list)
@@ -370,6 +507,14 @@ class TimetableGenerator:
 
         sessions = self._build_sessions(courses, student_groups)
         room_capabilities = self._build_room_capabilities(rooms)
+        
+        # OPTIMIZATION: Pre-compute eligibility maps once (cached for O(1) lookup)
+        # This eliminates N+1 queries during assignment phase
+        course_faculty_cache = {}
+        course_room_cache = {}
+        for course in courses:
+            course_faculty_cache[course.id] = self._faculty_for_course(course, faculty, faculty_expertise)
+            course_room_cache[course.id] = self._rooms_for_course(course, rooms, room_capabilities)
 
         return {
             "courses": courses,
@@ -387,6 +532,9 @@ class TimetableGenerator:
             "faculty_seniority": faculty_seniority,
             "max_periods_per_day_per_group": max_per_day_for_group,
             "room_capabilities": room_capabilities,
+            # OPTIMIZATION: Pre-computed caches
+            "course_faculty_cache": course_faculty_cache,
+            "course_room_cache": course_room_cache,
         }
 
     def _estimate_faculty_seniority(self, faculty_list: List[Faculty]) -> Dict[int, float]:
@@ -484,72 +632,132 @@ class TimetableGenerator:
         """
         Determines which student groups should take a specific course.
         Enforces strict hierarchy: Program -> Branch -> Semester.
+        OPTIMIZED: Pre-normalize course attributes once, cache group attributes.
         """
         eligible = []
         
-        # Check if we should apply strict filtering
-        has_constraints = (
-            getattr(course, 'program', None) or 
-            getattr(course, 'semester', None) or 
-            getattr(course, 'branch', None)
-        )
+        # OPTIMIZATION: Get and normalize course attributes ONCE before loop
+        c_prog = getattr(course, 'program', None)
+        c_sem = getattr(course, 'semester', None)
+        c_branch = getattr(course, 'branch', None)
         
-        # If no constraints on course, maybe it's common? 
-        # But usually courses have at least a branch or semester.
-        # If absolutely no metadata, falling back to all groups might be intended (e.g. "General Assembly")
+        # Pre-normalize course attributes (done once, not per-group)
+        if c_prog:
+            c_prog = str(c_prog).strip().lower()
+        if c_sem is not None:
+            try:
+                c_sem = int(c_sem)
+            except (ValueError, TypeError):
+                c_sem = None
+        if c_branch:
+            c_branch = str(c_branch).strip().lower()
+        
+        # Check if course has any constraints
+        has_constraints = bool(c_prog or c_sem is not None or c_branch)
+        
+        # If course has no constraints, match to all groups (common course)
         if not has_constraints:
             return groups
 
+        # OPTIMIZATION: Pre-normalize all groups once (cache for reuse)
+        # Build normalized group cache if not exists
+        if not hasattr(self, '_group_cache'):
+            self._group_cache = {}
+        
+        # Course has constraints - match groups that satisfy them
         for group in groups:
-            # 1. Program Match
-            c_prog = getattr(course, 'program', None)
-            g_prog = getattr(group, 'program', None)
-            if c_prog and g_prog:
-                if c_prog.strip().lower() != g_prog.strip().lower():
+            # Skip "Default" group if course has specific constraints
+            if group.name.lower() == "default" and has_constraints:
+                continue
+            
+            # OPTIMIZATION: Use cached normalized group attributes
+            group_id = id(group)  # Use object id as cache key
+            if group_id not in self._group_cache:
+                # Normalize and cache group attributes
+                g_prog = getattr(group, 'program', None)
+                g_sem = getattr(group, 'semester', None)
+                g_branch = getattr(group, 'branch', None)
+                
+                # Normalize
+                if g_prog:
+                    g_prog = str(g_prog).strip().lower()
+                if g_sem is not None:
+                    try:
+                        g_sem = int(g_sem)
+                    except (ValueError, TypeError):
+                        g_sem = None
+                if g_branch:
+                    g_branch = str(g_branch).strip().lower()
+                
+                self._group_cache[group_id] = (g_prog, g_sem, g_branch)
+            else:
+                g_prog, g_sem, g_branch = self._group_cache[group_id]
+            
+            # 1. Program Match: If course has program, group must match (or group has no program)
+            if c_prog:
+                if g_prog and c_prog != g_prog:
                     continue
             
-            # 2. Semester Match (Strict)
-            c_sem = getattr(course, 'semester', None)
-            g_sem = getattr(group, 'semester', None)
+            # 2. Semester Match: If course has semester, group must match (or group has no semester)
             if c_sem is not None:
-                # If course has semester, prefer matching groups; allow legacy groups with missing semester
-                if g_sem is not None:
-                    if int(c_sem) != int(g_sem):
-                        continue
-                # else g_sem is None -> accept (legacy openness)
+                if g_sem is not None and c_sem != g_sem:
+                    continue
             
-            # 3. Branch Match
-            if course.branch:
-                c_branch = course.branch.strip().lower()
-                g_branch = getattr(group, 'branch', '')
-                # If group has explicit branch, require exact match. If group has no branch (legacy), accept.
-                if g_branch:
-                    if c_branch != g_branch.strip().lower():
-                        continue
+            # 3. Branch Match: If course has branch, group must match (or group has no branch)
+            if c_branch:
+                if g_branch and c_branch != g_branch:
+                    continue
             
+            # All constraints satisfied (or group doesn't have conflicting constraints)
             eligible.append(group)
+        
+        # If no groups matched but course has constraints, log warning
+        if not eligible and has_constraints and self.verbose:
+            print(f"[MATCH] Course {course.code} (P:{c_prog}, S:{c_sem}, B:{c_branch}) matched 0 groups")
         
         return eligible
 
     def _build_sessions(self, courses: List[Course], groups: List[StudentGroup]):
         sessions = []
         session_id = 1
+        
+        # Skip verbose tracking in fast mode
+        if self.verbose:
+            group_usage = defaultdict(int)
+            print(f"[BUILD_SESSIONS] Building sessions for {len(courses)} courses and {len(groups)} groups")
+        
         for course in courses:
             eligible_groups = self._eligible_groups_for_course(course, groups)
+            
+            if self.verbose and not eligible_groups:
+                print(f"[BUILD_SESSIONS] WARNING: Course {course.code} matched 0 groups!")
+            
+            is_lab = course.course_type == "practical"
+            hours = course.hours_per_week
+            
             for group in eligible_groups:
-                is_lab = course.course_type == "practical"
-                for _ in range(course.hours_per_week):
+                if self.verbose:
+                    group_usage[group.name] += 1
+                # Pre-compute course code lowercase once
+                course_code_lower = course.code.lower()
+                # Create all sessions for this course-group pair in one go
+                for _ in range(hours):
                     sessions.append(
                         Session(
                             id=session_id,
                             course_id=course.id,
-                            course_code=course.code.lower(),
+                            course_code=course_code_lower,
                             course_type=course.course_type,
                             student_group=group.name,
                             is_lab=is_lab,
                         )
                     )
                     session_id += 1
+        
+        if self.verbose:
+            print(f"[BUILD_SESSIONS] Created {len(sessions)} sessions")
+            print(f"[BUILD_SESSIONS] Group usage: {dict(group_usage)}")
+        
         return sessions
 
     # --------------------------------------------------------------------- #
@@ -1321,25 +1529,57 @@ class TimetableGenerator:
     # Persistence
     # --------------------------------------------------------------------- #
     def _persist_assignments(self, assignments, context):
+        import time
+        start_time = time.time()
         print(f"[PERSIST] Starting to persist {len(assignments)} assignments...")
-        entries_created = 0
-        for assignment in assignments:
-            entry = TimetableEntry(
-                course_id=assignment["course_id"],
-                faculty_id=assignment["faculty_id"],
-                room_id=assignment["room_id"],
-                time_slot_id=assignment["slot_id"],
-                student_group=assignment["group"],
-            )
-            self.db.session.add(entry)
-            entries_created += 1
-
-        print(f"[PERSIST] Committing {entries_created} entries to database...")
-        self.db.session.commit()
-        print(f"[PERSIST] Successfully committed {entries_created} entries!")
         
-        # Verify entries were saved
-        saved_count = TimetableEntry.query.count()
-        print(f"[PERSIST] Verification: {saved_count} total entries in database")
+        # OPTIMIZATION: True bulk insert using MongoDB insert_many
+        if assignments:
+            coll_name = 'timetableentry'
+            counters = self.db._db['__counters__']
+            
+            # Step 1: Pre-allocate all IDs in one database call
+            res = counters.find_one_and_update(
+                {'_id': coll_name}, 
+                {'$inc': {'seq': len(assignments)}}, 
+                upsert=True, 
+                return_document=True
+            )
+            start_id = int(res['seq']) - len(assignments) + 1
+            
+            # Step 2: Build all documents in memory (no database calls)
+            docs = []
+            for i, assignment in enumerate(assignments):
+                docs.append({
+                    'id': start_id + i,
+                    'course_id': assignment["course_id"],
+                    'faculty_id': assignment["faculty_id"],
+                    'room_id': assignment["room_id"],
+                    'time_slot_id': assignment["slot_id"],
+                    'student_group': assignment["group"],
+                })
+            
+            # Step 3: Single bulk insert (parallel writes with ordered=False)
+            if self.verbose:
+                print(f"[PERSIST] Bulk inserting {len(docs)} entries...")
+            bulk_start = time.time()
+            self.db._db[coll_name].insert_many(docs, ordered=False)
+            bulk_time = time.time() - bulk_start
+            
+            entries_created = len(docs)
+            if self.verbose:
+                print(f"[PERSIST] Successfully bulk inserted {entries_created} entries in {bulk_time:.2f}s!")
+            
+            # REMOVED: Verification query (trust bulk write)
+            # Verification queries scan entire collection - very slow!
+            
+            total_time = time.time() - start_time
+            if self.verbose:
+                print(f"[PERSIST] Total persistence time: {total_time:.2f}s")
+                print(f"[PERSIST] Average time per entry: {(total_time / len(docs) * 1000):.2f}ms")
+        else:
+            entries_created = 0
+            if self.verbose:
+                print(f"[PERSIST] No assignments to persist")
         
         return entries_created
