@@ -134,6 +134,31 @@
     .delete-subject-btn:hover {
         text-decoration: underline;
     }
+
+    /* Button styling improvements */
+    .action-btn {
+        min-width: 120px;
+        height: 38px;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.2s ease;
+    }
+
+    .action-btn i {
+        font-size: 1rem;
+    }
+
+    .btn-sm.action-btn {
+        min-width: 100px;
+        height: 32px;
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+    }
 </style>
 
 <div class="container-fluid px-4">
@@ -145,10 +170,10 @@
         </div>
         {% if user.role == 'admin' %}
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-danger" onclick="deleteAllBranches()">
+            <button class="btn btn-outline-danger action-btn" onclick="deleteAllBranches()">
                 <i class="bi bi-trash"></i> Delete All Branches
             </button>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBranchModal">
+            <button class="btn btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#addBranchModal">
                 <i class="bi bi-plus-circle"></i> Add Course/Branch
             </button>
         </div>
@@ -313,17 +338,17 @@
                             <h6 id="selectedSemesterTitle">Semester 1</h6>
                             {% if user.role == 'admin' %}
                             <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteAllSubjects()">
+                                <button class="btn btn-sm btn-outline-danger action-btn\" onclick=\"deleteAllSubjects()">
                                     <i class="bi bi-trash"></i> Delete All
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary" onclick="triggerSubjectImport()">
+                                <button class="btn btn-sm btn-outline-secondary action-btn\" onclick=\"triggerSubjectImport()">
                                     <i class="bi bi-file-earmark-arrow-up"></i> Import (.csv/.xlsx)
                                 </button>
-                                <a class="btn btn-sm btn-outline-info" href="/download-template/courses?format=csv"
+                                <a class="btn btn-sm btn-outline-info action-btn\" href="/download-template/courses?format=csv"
                                     target="_blank">
                                     <i class="bi bi-download"></i> Template
                                 </a>
-                                <button class="btn btn-sm btn-primary" onclick="openAddSubjectModal()">
+                                <button class="btn btn-sm btn-primary action-btn\" onclick=\"openAddSubjectModal()">
                                     <i class="bi bi-plus"></i> Add Subject
                                 </button>
                                 <input type="file" id="subjectImportFile" accept=".csv,.xls,.xlsx" style="display:none"

@@ -1358,17 +1358,11 @@ def delete_all_branches():
         # Count before deletion
         branch_count = Branch.query.count()
         
-        # Get all branches to delete their subjects
-        branches = Branch.query.all()
-        subject_count = 0
-        
-        for branch in branches:
-            # Delete all subjects for this branch
-            deleted = Course.query.filter_by(branch=branch.name, program=branch.program).delete()
-            subject_count += deleted
+        # Delete all subjects first (all courses)
+        subject_count = Course.query.delete(synchronize_session=False)
         
         # Delete all branches
-        Branch.query.delete()
+        Branch.query.delete(synchronize_session=False)
         
         db.session.commit()
         invalidate_cache('courses')
@@ -1392,7 +1386,10 @@ def delete_all_subjects_in_branch(branch_code):
             return jsonify({'success': False, 'error': 'Branch not found'}), 404
         
         # Delete all subjects for this branch
-        deleted_count = Course.query.filter_by(branch=branch.name, program=branch.program).delete()
+        deleted_count = Course.query.filter_by(
+            branch=branch.name, 
+            program=branch.program
+        ).delete(synchronize_session=False)
         
         db.session.commit()
         invalidate_cache('courses')
