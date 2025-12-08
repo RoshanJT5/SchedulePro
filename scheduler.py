@@ -59,12 +59,19 @@ class TimetableGenerator:
         self.senior_faculty_preference = self.config.get('senior_faculty_preference', True)
         self.consecutive_penalty_weight = self.config.get('consecutive_penalty', 20)
         self.lab_priority_weight = self.config.get('lab_priority', 50)
+        # Fast mode drastically reduces variable count by ignoring rooms in ILP
+        self.fast_mode = self.config.get('fast_mode', True)
+        self.verbose = self.config.get('verbose', False)
+        # Ultra fast mode: skip ILP completely and use greedy heuristic
+        self.ultra_fast = self.config.get('ultra_fast', True)
 
     # --------------------------------------------------------------------- #
     # Public API
     # --------------------------------------------------------------------- #
     def generate(self, filters=None):
         context = self._load_context(filters)
+        if self.verbose:
+            print(f"[GEN] Context: courses={len(context['courses'])}, groups={len(context['student_groups'])}, faculty={len(context['faculty'])}, rooms={len(context['rooms'])}, slots={len(context['time_slots'])}, sessions={len(context['sessions'])}")
         if not context["courses"]:
             return {"success": False, "error": "No courses found matching criteria. Please check filters."}
         if not context["faculty"]:
@@ -74,7 +81,44 @@ class TimetableGenerator:
         if not context["time_slots"]:
             return {"success": False, "error": "No time slots found. Please configure time slots."}
 
-        # Constraint 1: Validate workload bounds
+        # Ultra fast: greedy assignment pipeline
+        if self.ultra_fast:
+            greedy_res = self._generate_greedy(context)
+            if not greedy_res["success"]:
+                if self.verbose:
+                    print(f"[GEN] Greedy failed: {greedy_res.get('error')}. Falling back to fast ILP…")
+                # Fallback to fast ILP once
+                ilp_fast = self._solve_with_ilp_fast(context)
+                if not ilp_fast.get('success'):
+                    return greedy_res
+                final_assignments = ilp_fast["assignments"]
+                warnings = greedy_res.get("warnings", []) + ilp_fast.get("warnings", [])
+                overwork_warnings = self._detect_overwork(final_assignments, context)
+                warnings.extend(overwork_warnings)
+                faculty_schedules = self._generate_faculty_schedules(final_assignments, context)
+                entries_created = self._persist_assignments(final_assignments, context)
+                return {
+                    "success": True,
+                    "entries_created": entries_created,
+                    "warnings": warnings,
+                    "faculty_schedules": faculty_schedules,
+                    "overwork_alerts": [w for w in warnings if "overwork" in w.lower()]
+                }
+            warnings = greedy_res.get("warnings", [])
+            final_assignments = greedy_res["assignments"]
+            overwork_warnings = self._detect_overwork(final_assignments, context)
+            warnings.extend(overwork_warnings)
+            faculty_schedules = self._generate_faculty_schedules(final_assignments, context)
+            entries_created = self._persist_assignments(final_assignments, context)
+            return {
+                "success": True,
+                "entries_created": entries_created,
+                "warnings": warnings,
+                "faculty_schedules": faculty_schedules,
+                "overwork_alerts": [w for w in warnings if "overwork" in w.lower()]
+            }
+
+        # Constraint 1: Validate workload bounds (ILP modes)
         bound_report = self._run_bound_analyzer(context)
         if not bound_report["feasible"]:
             return {
@@ -89,14 +133,17 @@ class TimetableGenerator:
         if not ilp_result["success"]:
             return {"success": False, "error": ilp_result["error"], "warnings": warnings}
 
-        # Constraints 4-8: GA refinement with enhanced constraints
-        ga_result = self._refine_with_genetic_algorithm(
-            context,
-            ilp_result["assignments"],
-            ilp_result.get("session_candidates", {}),
-        )
-        warnings.extend(ga_result.get("warnings", []))
-        final_assignments = ga_result.get("assignments", ilp_result["assignments"])
+        # Constraints 4-8: Optional GA refinement (skip in fast mode for speed)
+        if self.fast_mode:
+            final_assignments = ilp_result["assignments"]
+        else:
+            ga_result = self._refine_with_genetic_algorithm(
+                context,
+                ilp_result["assignments"],
+                ilp_result.get("session_candidates", {}),
+            )
+            warnings.extend(ga_result.get("warnings", []))
+            final_assignments = ga_result.get("assignments", ilp_result["assignments"])
 
         # Constraint 9: Overwork detection
         overwork_warnings = self._detect_overwork(final_assignments, context)
@@ -114,6 +161,144 @@ class TimetableGenerator:
             "faculty_schedules": faculty_schedules,
             "overwork_alerts": [w for w in warnings if "overwork" in w.lower()]
         }
+
+    # --------------------------------------------------------------------- #
+    # Ultra-Fast Greedy Scheduler (No ILP)
+    # --------------------------------------------------------------------- #
+    def _generate_greedy(self, context):
+        """Very fast heuristic scheduler that assigns sessions greedily.
+        Prioritizes labs first, respects faculty availability, group/day max,
+        room capabilities, and avoids same-slot conflicts.
+        """
+        warnings = []
+        assignments = []
+
+        # Indexes and helpers
+        slot_by_id = context["slot_by_id"]
+        time_slots = context["time_slots"]
+        course_by_id = context["course_by_id"]
+        rooms = context["rooms"]
+        room_caps = context["room_capabilities"]
+        faculty_avail = context["faculty_availability"]
+        expertise_map = context["faculty_expertise"]
+        max_per_day = context.get('max_periods_per_day_per_group', 0) or None
+
+        # State trackers
+        used_faculty_slot = defaultdict(set)    # (faculty_id) -> {slot_id}
+        used_group_slot = defaultdict(set)      # (group_name) -> {slot_id}
+        used_room_slot = defaultdict(set)       # (slot_id) -> {room_id}
+        group_day_count = defaultdict(lambda: defaultdict(int))  # group -> day -> count
+        faculty_hours = defaultdict(int)
+
+        # Precompute eligible rooms per course id
+        eligible_rooms_cache = {}
+        # Index rooms by type for graceful fallbacks
+        rooms_by_type = {
+            'lab': [r for r in rooms if getattr(r, 'room_type', '') == 'lab'],
+            'classroom': [r for r in rooms if getattr(r, 'room_type', '') == 'classroom']
+        }
+
+        # Sort sessions: labs first, then by course code for stability
+        sessions = list(context["sessions"]) or []
+        sessions.sort(key=lambda s: (0 if s.is_lab else 1, s.course_code))
+
+        # Precompute faculty candidates per course
+        faculty_for_course_cache = {}
+        def get_faculty_candidates(course):
+            if course.id not in faculty_for_course_cache:
+                faculty_for_course_cache[course.id] = self._faculty_for_course(course, context["faculty"], expertise_map)
+            return faculty_for_course_cache[course.id]
+
+        # Iterate each session and place it
+        for session in sessions:
+            course = course_by_id.get(session.course_id)
+            if not course:
+                continue
+
+            # Faculty candidates respecting expertise and not exceeding max_hours
+            cand_faculty = [f for f in get_faculty_candidates(course) if faculty_hours[f.id] < (f.max_hours_per_week or 16)]
+            if not cand_faculty:
+                warnings.append(f"⚠️ No eligible faculty for course {course.code}")
+                continue
+
+            # Prefer faculty with lower current hours
+            cand_faculty.sort(key=lambda f: faculty_hours[f.id])
+
+            # Eligible rooms for course
+            if course.id not in eligible_rooms_cache:
+                eligible_rooms_cache[course.id] = self._rooms_for_course(course, rooms, room_caps)
+            eligible_rooms = eligible_rooms_cache[course.id]
+            if not eligible_rooms:
+                # Graceful fallback: use room type buckets; if still empty, use any room
+                fallback = rooms_by_type['lab'] if session.is_lab else rooms_by_type['classroom']
+                eligible_rooms = fallback if fallback else rooms
+                if not eligible_rooms:
+                    warnings.append(f"⚠️ No rooms available to place course {course.code}")
+                    continue
+
+            placed = False
+            # Iterate slots in time order; optionally cap per-session slots for speed
+            slot_cap = self.config.get('max_slots_per_session', 12)
+            checked = 0
+            for slot in time_slots:
+                if checked >= slot_cap:
+                    break
+                checked += 1
+                day = slot.day
+                slot_id = slot.id
+
+                # Group constraints: avoid conflicts and per-day max
+                if slot_id in used_group_slot[session.student_group]:
+                    continue
+                if max_per_day is not None and group_day_count[session.student_group][day] >= max_per_day:
+                    continue
+
+                # Try faculty in order
+                for fac in cand_faculty:
+                    if slot_id not in faculty_avail.get(fac.id, set()):
+                        continue
+                    if slot_id in used_faculty_slot[fac.id]:
+                        continue
+
+                    # Find a free eligible room for this slot
+                    room_found = None
+                    taken = used_room_slot[slot_id]
+                    for r in eligible_rooms:
+                        if r.id not in taken:
+                            room_found = r
+                            break
+                    if not room_found:
+                        continue
+
+                    # Place assignment
+                    assignments.append({
+                        "session_id": session.id,
+                        "faculty_id": fac.id,
+                        "room_id": room_found.id,
+                        "slot_id": slot_id,
+                        "group": session.student_group,
+                        "course_id": course.id,
+                        "course_code": session.course_code,
+                        "is_lab": session.is_lab,
+                    })
+                    used_faculty_slot[fac.id].add(slot_id)
+                    used_group_slot[session.student_group].add(slot_id)
+                    used_room_slot[slot_id].add(room_found.id)
+                    group_day_count[session.student_group][day] += 1
+                    faculty_hours[fac.id] += 1
+                    placed = True
+                    break
+
+                if placed:
+                    break
+
+            if not placed:
+                warnings.append(f"⚠️ Could not place session for course {course.code} (group {session.student_group})")
+
+        if not assignments:
+            return {"success": False, "error": "Greedy scheduler could not place any sessions.", "warnings": warnings}
+
+        return {"success": True, "assignments": assignments, "warnings": warnings}
 
     # --------------------------------------------------------------------- #
     # Context Preparation
@@ -324,23 +509,19 @@ class TimetableGenerator:
             c_sem = getattr(course, 'semester', None)
             g_sem = getattr(group, 'semester', None)
             if c_sem is not None:
-                # If course has semester, group MUST have matching semester
-                if g_sem is None or int(c_sem) != int(g_sem):
-                    continue
+                # If course has semester, prefer matching groups; allow legacy groups with missing semester
+                if g_sem is not None:
+                    if int(c_sem) != int(g_sem):
+                        continue
+                # else g_sem is None -> accept (legacy openness)
             
             # 3. Branch Match
             if course.branch:
                 c_branch = course.branch.strip().lower()
                 g_branch = getattr(group, 'branch', '')
-                
-                # If group, has explicit branch, use it
+                # If group has explicit branch, require exact match. If group has no branch (legacy), accept.
                 if g_branch:
                     if c_branch != g_branch.strip().lower():
-                        continue
-                else:
-                    # Fallback: check if branch name is in group name/description
-                    # (Legacy support for groups created before branch field)
-                    if c_branch not in group.name.lower() and c_branch not in (group.description or '').lower():
                         continue
             
             eligible.append(group)
@@ -448,14 +629,21 @@ class TimetableGenerator:
     # ILP Solver (Constraints 1-3)
     # --------------------------------------------------------------------- #
     def _solve_with_ilp(self, context):
-        """Enhanced ILP with lab priority and availability focus"""
+        """Enhanced ILP with lab priority and availability focus.
+        In fast mode, uses a reduced formulation (session, faculty, slot) and assigns rooms greedily after solving.
+        """
+        if self.fast_mode:
+            return self._solve_with_ilp_fast(context)
+        
+        # Full formulation (includes rooms in decision variables)
         warnings = []
         problem = pulp.LpProblem("Timetable", pulp.LpMinimize)
         
-        print(f"[ILP] Starting ILP solver with {len(context['sessions'])} sessions")
-        print(f"[ILP] Faculty count: {len(context['faculty'])}")
-        print(f"[ILP] Room count: {len(context['rooms'])}")
-        print(f"[ILP] Time slot count: {len(context['time_slots'])}")
+        if self.verbose:
+            print(f"[ILP] Starting ILP solver with {len(context['sessions'])} sessions")
+            print(f"[ILP] Faculty count: {len(context['faculty'])}")
+            print(f"[ILP] Room count: {len(context['rooms'])}")
+            print(f"[ILP] Time slot count: {len(context['time_slots'])}")
         
         # Build candidates for each session
         session_candidates = {}
@@ -466,22 +654,26 @@ class TimetableGenerator:
             eligible_faculty = self._faculty_for_course(course, context["faculty"], context["faculty_expertise"])
             eligible_rooms = self._rooms_for_course(course, context["rooms"], context["room_capabilities"])
             
-            print(f"[ILP] Session {session.id} ({course.code}): {len(eligible_faculty)} faculty, {len(eligible_rooms)} rooms")
+            if self.verbose:
+                print(f"[ILP] Session {session.id} ({course.code}): {len(eligible_faculty)} faculty, {len(eligible_rooms)} rooms")
             
             if not eligible_faculty:
                 warnings.append(f"⚠️ No faculty available for course {course.code}")
-                print(f"[ILP] WARNING: No eligible faculty for {course.code}")
+                if self.verbose:
+                    print(f"[ILP] WARNING: No eligible faculty for {course.code}")
                 continue
             if not eligible_rooms:
                 warnings.append(f"⚠️ No suitable rooms for course {course.code}")
-                print(f"[ILP] WARNING: No eligible rooms for {course.code}")
+                if self.verbose:
+                    print(f"[ILP] WARNING: No eligible rooms for {course.code}")
                 continue
             
             candidates = []
             for faculty in eligible_faculty:
                 # Constraint 3: Only consider available timeslots
                 available_slots = context["faculty_availability"].get(faculty.id, set())
-                print(f"[ILP]   Faculty {faculty.name} (ID:{faculty.id}) has {len(available_slots)} available slots")
+                if self.verbose:
+                    print(f"[ILP]   Faculty {faculty.name} (ID:{faculty.id}) has {len(available_slots)} available slots")
                 
                 for room in eligible_rooms:
                     for slot in context["time_slots"]:
@@ -518,10 +710,11 @@ class TimetableGenerator:
             
             if not candidates:
                 warnings.append(f"⚠️ No valid candidates for session {session.id} of {course.code}")
-                print(f"[ILP] ERROR: No valid candidates for session {session.id} ({course.code}) - likely no faculty availability!")
+                if self.verbose:
+                    print(f"[ILP] ERROR: No valid candidates for session {session.id} ({course.code}) - likely no faculty availability!")
                 continue
-            
-            print(f"[ILP] Session {session.id} has {len(candidates)} valid candidates")
+            if self.verbose:
+                print(f"[ILP] Session {session.id} has {len(candidates)} valid candidates")
             session_candidates[session.id] = candidates
             
             # Constraint: Each session assigned exactly once
@@ -531,7 +724,8 @@ class TimetableGenerator:
             else:
                 problem += pulp.lpSum(c["var"] for c in candidates) == 1, f"session_{session.id}"
         
-        print(f"[ILP] Total sessions with candidates: {len(session_candidates)} out of {len(context['sessions'])}")
+        if self.verbose:
+            print(f"[ILP] Total sessions with candidates: {len(session_candidates)} out of {len(context['sessions'])}")
         
         # Constraint: No faculty/room/group conflicts per timeslot
         faculty_slot_usage = defaultdict(list)
@@ -618,7 +812,7 @@ class TimetableGenerator:
         problem += pulp.lpSum(objective_terms)
         
         # Solve
-        solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=60)
+        solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=30, threads=2)
         status = problem.solve(solver)
         
         if status != pulp.LpStatusOptimal:
@@ -650,6 +844,218 @@ class TimetableGenerator:
             "warnings": warnings,
             "session_candidates": session_candidates,
         }
+
+    def _solve_with_ilp_fast(self, context):
+        """Reduced ILP: assign (session, faculty, slot) only; assign rooms greedily after.
+        This drastically reduces the decision variable count and solves faster.
+        """
+        warnings = []
+        problem = pulp.LpProblem("TimetableFast", pulp.LpMinimize)
+
+        if self.verbose:
+            print(f"[ILP-FAST] Sessions: {len(context['sessions'])}, Faculty: {len(context['faculty'])}, Slots: {len(context['time_slots'])}")
+
+        # Build candidates per session without room dimension
+        session_candidates = {}
+        decision_vars = {}
+
+        for session in context["sessions"]:
+            course = context["course_by_id"][session.course_id]
+            eligible_faculty = self._faculty_for_course(course, context["faculty"], context["faculty_expertise"])
+            if not eligible_faculty:
+                warnings.append(f"⚠️ No faculty available for course {course.code}")
+                continue
+
+            candidates = []
+            for faculty in eligible_faculty:
+                available_slots = context["faculty_availability"].get(faculty.id, set())
+                if not available_slots:
+                    continue
+                # Optional pruning: limit slots considered per session to reduce vars
+                # Keep up to N earliest available slots to shrink search space
+                N = self.config.get('max_slots_per_session', 25)
+                limited_slots = []
+                for slot in context["time_slots"]:
+                    if slot.id in available_slots:
+                        limited_slots.append(slot)
+                        if len(limited_slots) >= N:
+                            break
+
+                for slot in limited_slots:
+                    var_name = f"s{session.id}_f{faculty.id}_t{slot.id}"
+                    var = pulp.LpVariable(var_name, cat="Binary")
+                    decision_vars[var_name] = var
+
+                    priority_score = 0
+                    if session.is_lab:
+                        priority_score += self.lab_priority_weight
+                    if self.senior_faculty_preference:
+                        seniority = context["faculty_seniority"].get(faculty.id, 0.5)
+                        if seniority > 0.7 and slot.period <= 3:
+                            priority_score -= 10
+
+                    candidates.append({
+                        "var": var,
+                        "faculty_id": faculty.id,
+                        "slot_id": slot.id,
+                        "group": session.student_group,
+                        "course_id": course.id,
+                        "course_code": session.course_code,
+                        "is_lab": session.is_lab,
+                        "priority": priority_score
+                    })
+
+            if not candidates:
+                warnings.append(f"⚠️ No valid candidates for session {session.id} of {course.code}")
+                continue
+
+            session_candidates[session.id] = candidates
+            if self.config.get('maximize_fill', False):
+                problem += pulp.lpSum(c["var"] for c in candidates) <= 1, f"session_{session.id}_opt"
+            else:
+                problem += pulp.lpSum(c["var"] for c in candidates) == 1, f"session_{session.id}"
+
+        # No faculty conflicts per slot; no group conflicts per slot
+        faculty_slot_usage = defaultdict(list)
+        group_slot_usage = defaultdict(list)
+        for candidates in session_candidates.values():
+            for c in candidates:
+                faculty_slot_usage[(c["faculty_id"], c["slot_id"])].append(c["var"])
+                group_slot_usage[(c["group"], c["slot_id"])].append(c["var"])
+        for key, vars_list in faculty_slot_usage.items():
+            problem += pulp.lpSum(vars_list) <= 1, f"faculty_{key[0]}_slot_{key[1]}"
+        for key, vars_list in group_slot_usage.items():
+            problem += pulp.lpSum(vars_list) <= 1, f"group_{key[0]}_slot_{key[1]}"
+
+        # Group per-day maximum
+        max_per_day = context.get('max_periods_per_day_per_group', 0) or None
+        if max_per_day is not None:
+            for group in context.get('student_groups', []):
+                for day, slots in context.get('slots_by_day', {}).items():
+                    day_vars = []
+                    slot_ids = {s.id for s in slots}
+                    for candidates in session_candidates.values():
+                        for c in candidates:
+                            if c['group'] == group.name and c['slot_id'] in slot_ids:
+                                day_vars.append(c['var'])
+                    if day_vars:
+                        problem += pulp.lpSum(day_vars) <= max_per_day, f"group_{group.name}_day_{day}_max"
+
+        # Faculty workload bounds with slack
+        faculty_hours = defaultdict(list)
+        for candidates in session_candidates.values():
+            for c in candidates:
+                faculty_hours[c["faculty_id"]].append(c["var"])
+        for faculty in context["faculty"]:
+            if faculty.id in faculty_hours:
+                total = pulp.lpSum(faculty_hours[faculty.id])
+                slack = pulp.LpVariable(f"slack_faculty_{faculty.id}", lowBound=0, cat="Continuous")
+                problem += total + slack >= faculty.min_hours_per_week, f"faculty_{faculty.id}_min_soft"
+                problem += total <= faculty.max_hours_per_week, f"faculty_{faculty.id}_max"
+                faculty._min_slack_var = slack
+
+        # At least one lab per group (if any lab sessions exist for that group)
+        for group in context["student_groups"]:
+            lab_vars = []
+            for candidates in session_candidates.values():
+                for c in candidates:
+                    if c["is_lab"] and c["group"] == group.name:
+                        lab_vars.append(c["var"])
+            if lab_vars:
+                problem += pulp.lpSum(lab_vars) >= 1, f"group_{group.name}_min_lab"
+
+        # Objective: penalize slack + use priorities; optionally reward assignment fill
+        objective_terms = []
+        slack_penalty = self.config.get('min_violation_penalty', 1000)
+        for faculty in context["faculty"]:
+            if hasattr(faculty, '_min_slack_var'):
+                objective_terms.append(slack_penalty * faculty._min_slack_var)
+        for candidates in session_candidates.values():
+            for c in candidates:
+                objective_terms.append(c["priority"] * c["var"])
+        if self.config.get('maximize_fill', False):
+            assign_reward = -self.config.get('assign_reward', 50)
+            for candidates in session_candidates.values():
+                for c in candidates:
+                    objective_terms.append(assign_reward * c["var"])
+        problem += pulp.lpSum(objective_terms)
+
+        solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=20, threads=2)
+        status = problem.solve(solver)
+        if status != pulp.LpStatusOptimal:
+            return {
+                "success": False,
+                "error": f"ILP-FAST solver failed with status: {pulp.LpStatus[status]}",
+                "warnings": warnings
+            }
+
+        # Extract assignments (no rooms yet)
+        assignments = []
+        for session_id, candidates in session_candidates.items():
+            for c in candidates:
+                if pulp.value(c["var"]) > 0.5:
+                    assignments.append({
+                        "session_id": session_id,
+                        "faculty_id": c["faculty_id"],
+                        "slot_id": c["slot_id"],
+                        "group": c["group"],
+                        "course_id": c["course_id"],
+                        "course_code": c["course_code"],
+                        "is_lab": c["is_lab"],
+                    })
+
+        # Assign rooms greedily per slot
+        room_warnings, assignments_with_rooms = self._assign_rooms_greedy(assignments, context)
+        warnings.extend(room_warnings)
+        return {
+            "success": True,
+            "assignments": assignments_with_rooms,
+            "warnings": warnings,
+            "session_candidates": session_candidates,
+        }
+
+    def _assign_rooms_greedy(self, assignments, context):
+        """Greedy room assignment per slot; drop assignments that cannot get a valid room."""
+        warnings = []
+        result = []
+        used_room_per_slot = defaultdict(set)
+        rooms = context["rooms"]
+        room_caps = context["room_capabilities"]
+
+        # Index rooms by type for quick filtering
+        rooms_by_type = {
+            'lab': [r for r in rooms if r.room_type == 'lab'],
+            'classroom': [r for r in rooms if r.room_type == 'classroom']
+        }
+
+        # Precompute eligible rooms for each course id
+        eligible_rooms_cache = {}
+
+        for a in assignments:
+            course = context["course_by_id"].get(a["course_id"])
+            if not course:
+                continue
+            key = course.id
+            if key not in eligible_rooms_cache:
+                # compute eligible rooms once
+                eligible_rooms_cache[key] = self._rooms_for_course(course, rooms, room_caps)
+
+            slot_id = a["slot_id"]
+            taken = used_room_per_slot[slot_id]
+            room_assigned = None
+            for r in eligible_rooms_cache[key]:
+                if r.id not in taken:
+                    room_assigned = r
+                    break
+            if not room_assigned:
+                warnings.append(f"⚠️ No available room for course {course.code} at slot {slot_id}; dropping this session.")
+                continue
+            used_room_per_slot[slot_id].add(room_assigned.id)
+            b = a.copy()
+            b["room_id"] = room_assigned.id
+            result.append(b)
+
+        return warnings, result
 
     def _faculty_for_course(self, course: Course, faculty_list: List[Faculty], expertise_map):
         """Constraint 4 & 8: Select faculty based on expertise"""

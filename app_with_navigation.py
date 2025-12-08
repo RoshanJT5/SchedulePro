@@ -1220,6 +1220,135 @@ def delete_subject_from_branch(branch_code, subject_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/branches/<branch_code>/subjects/import', methods=['POST'])
+@admin_required
+def import_subjects_to_branch(branch_code):
+    """Import subjects into a specific semester of a branch from CSV or Excel.
+
+    Accepts multipart/form-data with:
+    - file: CSV/XLS/XLSX file
+    - semester: integer target semester (required if file rows do not include 'semester')
+
+    Supported columns (case-insensitive):
+    - code (required)
+    - name (required)
+    - type / course_type (optional: 'theory' or 'practical')
+    - credits (optional)
+    - hours_per_week (optional)
+    - semester (optional; overrides form semester per row if present)
+    - required_room_tags / room_tags (optional, comma-separated)
+    """
+    try:
+        branch = Branch.query.filter_by(code=branch_code).first()
+        if not branch:
+            return jsonify({'success': False, 'error': 'Branch not found'}), 404
+
+        upload = request.files.get('file')
+        if not upload:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+
+        # Semester from form; may be overridden by per-row 'semester'
+        form_semester = request.form.get('semester') or request.args.get('semester')
+        try:
+            default_semester = int(form_semester) if form_semester not in (None, '') else None
+        except (TypeError, ValueError):
+            default_semester = None
+
+        # If no default semester provided and file doesn't include 'semester', we'll validate after first chunk
+        from csv_processor import process_upload_stream, get_missing_columns
+
+        chunks_generator = process_upload_stream(upload, chunk_size=1000)
+
+        created, updated = 0, 0
+
+        # Index existing subjects by code for this branch+program for quick upserts
+        existing = {c.code: c for c in Course.query.filter_by(program=branch.program, branch=branch.name).all()}
+
+        first_chunk_checked = False
+        for chunk in chunks_generator:
+            if not first_chunk_checked:
+                first_chunk_checked = True
+                if chunk:
+                    available_columns = set(chunk[0].keys())
+                    required_cols = {'code', 'name'}
+                    missing = get_missing_columns(available_columns, required_cols)
+                    if missing:
+                        return jsonify({'success': False, 'error': f"Missing columns: {', '.join(sorted(missing))}"}), 400
+
+                    # If no semester provided via form and column not present -> error
+                    if default_semester is None and 'semester' not in available_columns:
+                        return jsonify({'success': False, 'error': 'Semester is required. Provide a semester field in the file or pass form field `semester`.'}), 400
+
+            for row in chunk:
+                code = str(row.get('code', '')).strip()
+                name = str(row.get('name', '')).strip()
+                if not code or not name:
+                    continue
+
+                # Resolve semester: row overrides form default if present and valid
+                sem_val = row.get('semester', '')
+                if sem_val not in (None, ''):
+                    try:
+                        semester = int(float(sem_val))  # handle excel numeric
+                    except (TypeError, ValueError):
+                        semester = default_semester
+                else:
+                    semester = default_semester
+
+                if semester is None:
+                    return jsonify({'success': False, 'error': f"Row for code '{code}' missing semester and no default provided."}), 400
+
+                # Validate semester range
+                if semester < 1 or semester > branch.total_semesters:
+                    return jsonify({'success': False, 'error': f"Semester must be between 1 and {branch.total_semesters}. Invalid for code '{code}'."}), 400
+
+                course_type_raw = str(row.get('course_type', row.get('type', 'theory'))).lower().strip()
+                course_type = 'practical' if 'prac' in course_type_raw else 'theory'
+                credits = parse_int(row.get('credits'), 0)
+                hpw = parse_int(row.get('hours_per_week'), 3)
+                tags_raw = row.get('required_room_tags') or row.get('room_tags') or ''
+                tags = ','.join(t.strip() for t in str(tags_raw).split(',') if t and t.strip())
+
+                existing_course = existing.get(code)
+                if existing_course:
+                    # Update in-place
+                    existing_course.name = name
+                    existing_course.course_type = course_type
+                    existing_course.credits = credits
+                    existing_course.hours_per_week = hpw
+                    existing_course.program = branch.program
+                    existing_course.branch = branch.name
+                    existing_course.semester = semester
+                    existing_course.required_room_tags = tags
+                    db.session.add(existing_course)
+                    updated += 1
+                else:
+                    new_course = Course(
+                        code=code,
+                        name=name,
+                        course_type=course_type,
+                        credits=credits,
+                        hours_per_week=hpw,
+                        program=branch.program,
+                        branch=branch.name,
+                        semester=semester,
+                        required_room_tags=tags
+                    )
+                    db.session.add(new_course)
+                    existing[code] = new_course
+                    created += 1
+
+            # Commit per chunk
+            db.session.commit()
+
+        return jsonify({'success': True, 'created': created, 'updated': updated})
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Import failed: {str(exc)}'}), 500
+
+
 # Faculty Management
 @app.route('/faculty')
 @login_required

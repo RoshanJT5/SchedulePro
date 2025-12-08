@@ -307,9 +307,18 @@
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h6 id="selectedSemesterTitle">Semester 1</h6>
                             {% if user.role == 'admin' %}
-                            <button class="btn btn-sm btn-primary" onclick="openAddSubjectModal()">
-                                <i class="bi bi-plus"></i> Add Subject
-                            </button>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="triggerSubjectImport()">
+                                    <i class="bi bi-file-earmark-arrow-up"></i> Import (.csv/.xlsx)
+                                </button>
+                                <a class="btn btn-sm btn-outline-info" href="/download-template/courses?format=csv" target="_blank">
+                                    <i class="bi bi-download"></i> Template
+                                </a>
+                                <button class="btn btn-sm btn-primary" onclick="openAddSubjectModal()">
+                                    <i class="bi bi-plus"></i> Add Subject
+                                </button>
+                                <input type="file" id="subjectImportFile" accept=".csv,.xls,.xlsx" style="display:none" onchange="handleSubjectImport(this.files[0])" />
+                            </div>
                             {% endif %}
                         </div>
 
@@ -547,6 +556,43 @@
 
         // Show add subject modal
         new bootstrap.Modal(document.getElementById('addSubjectModal')).show();
+    }
+
+    // Trigger file input for import
+    function triggerSubjectImport() {
+        const input = document.getElementById('subjectImportFile');
+        if (!currentBranchCode || !currentSemester) {
+            UI.showToast('Select a branch and semester first', 'error');
+            return;
+        }
+        input.click();
+    }
+
+    // Handle subject import
+    function handleSubjectImport(file) {
+        if (!file) return;
+        const input = document.getElementById('subjectImportFile');
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('semester', currentSemester);
+
+        UI.showToast('Uploading… Please wait', 'info');
+        fetch(`/branches/${currentBranchCode}/subjects/import`, {
+            method: 'POST',
+            body: fd
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const msg = `Imported successfully. Created: ${data.created || 0}, Updated: ${data.updated || 0}`;
+                    UI.showToast(msg, 'success');
+                    setTimeout(() => location.reload(), 800);
+                } else {
+                    UI.showToast('Import error: ' + (data.error || 'Failed to import'), 'error');
+                }
+            })
+            .catch(err => UI.showToast('Import failed: ' + err, 'error'))
+            .finally(() => { input.value = ''; });
     }
 
     // Submit new subject
