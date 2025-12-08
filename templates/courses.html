@@ -144,9 +144,14 @@
             <p class="text-muted mb-0">Add, edit, and organize all available degree programs and branches.</p>
         </div>
         {% if user.role == 'admin' %}
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBranchModal">
-            <i class="bi bi-plus-circle"></i> Add Course/Branch
-        </button>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-danger" onclick="deleteAllBranches()">
+                <i class="bi bi-trash"></i> Delete All Branches
+            </button>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBranchModal">
+                <i class="bi bi-plus-circle"></i> Add Course/Branch
+            </button>
+        </div>
         {% endif %}
     </div>
 
@@ -308,16 +313,21 @@
                             <h6 id="selectedSemesterTitle">Semester 1</h6>
                             {% if user.role == 'admin' %}
                             <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteAllSubjects()">
+                                    <i class="bi bi-trash"></i> Delete All
+                                </button>
                                 <button class="btn btn-sm btn-outline-secondary" onclick="triggerSubjectImport()">
                                     <i class="bi bi-file-earmark-arrow-up"></i> Import (.csv/.xlsx)
                                 </button>
-                                <a class="btn btn-sm btn-outline-info" href="/download-template/courses?format=csv" target="_blank">
+                                <a class="btn btn-sm btn-outline-info" href="/download-template/courses?format=csv"
+                                    target="_blank">
                                     <i class="bi bi-download"></i> Template
                                 </a>
                                 <button class="btn btn-sm btn-primary" onclick="openAddSubjectModal()">
                                     <i class="bi bi-plus"></i> Add Subject
                                 </button>
-                                <input type="file" id="subjectImportFile" accept=".csv,.xls,.xlsx" style="display:none" onchange="handleSubjectImport(this.files[0])" />
+                                <input type="file" id="subjectImportFile" accept=".csv,.xls,.xlsx" style="display:none"
+                                    onchange="handleSubjectImport(this.files[0])" />
                             </div>
                             {% endif %}
                         </div>
@@ -633,6 +643,43 @@
                     setTimeout(() => location.reload(), 1000);
                 } else {
                     UI.showToast('Error: ' + (data.error || 'Failed to delete subject'), 'error');
+                }
+            });
+    }
+
+    // Delete all branches
+    function deleteAllBranches() {
+        fetch('/branches/delete-all', {
+            method: 'POST'
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    UI.showToast(data.message, 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    UI.showToast('Error: ' + (data.error || 'Failed to delete branches'), 'error');
+                }
+            });
+    }
+
+    // Delete all subjects in current branch
+    function deleteAllSubjects() {
+        if (!currentBranchCode) {
+            UI.showToast('No branch selected', 'error');
+            return;
+        }
+
+        fetch(`/branches/${currentBranchCode}/subjects/delete-all`, {
+            method: 'POST'
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    UI.showToast(data.message, 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    UI.showToast('Error: ' + (data.error || 'Failed to delete subjects'), 'error');
                 }
             });
     }
