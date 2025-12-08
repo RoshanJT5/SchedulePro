@@ -1069,6 +1069,33 @@ def add_branch():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# DELETE-ALL routes must come BEFORE parameterized routes to avoid matching issues
+@app.route('/branches/delete-all', methods=['POST'])
+@admin_required
+def delete_all_branches():
+    """Delete all branches and their associated subjects"""
+    try:
+        # Count before deletion
+        branch_count = Branch.query.count()
+        
+        # Delete all subjects first (all courses)
+        subject_count = Course.query.delete(synchronize_session=False)
+        
+        # Delete all branches
+        Branch.query.delete(synchronize_session=False)
+        
+        db.session.commit()
+        invalidate_cache('courses')
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully deleted {branch_count} branches and {subject_count} subjects'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/branches/<branch_code>', methods=['GET'])
 @login_required
 def get_branch(branch_code):
@@ -1188,6 +1215,33 @@ def add_subject_to_branch(branch_code):
                 'credits': subject.credits,
                 'course_type': subject.course_type
             }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/branches/<branch_code>/subjects/delete-all', methods=['POST'])
+@admin_required
+def delete_all_subjects_in_branch(branch_code):
+    """Delete all subjects in a specific branch"""
+    try:
+        branch = Branch.query.filter_by(code=branch_code).first()
+        if not branch:
+            return jsonify({'success': False, 'error': 'Branch not found'}), 404
+        
+        # Delete all subjects for this branch
+        deleted_count = Course.query.filter_by(
+            branch=branch.name, 
+            program=branch.program
+        ).delete(synchronize_session=False)
+        
+        db.session.commit()
+        invalidate_cache('courses')
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully deleted {deleted_count} subjects from {branch.name}'
         })
     except Exception as e:
         db.session.rollback()
@@ -1345,62 +1399,8 @@ def import_subjects_to_branch(branch_code):
     except ValueError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
     except Exception as exc:
-        db.session.rollback(
-)
+        db.session.rollback()
         return jsonify({'success': False, 'error': f'Import failed: {str(exc)}'}), 500
-
-
-@app.route('/branches/delete-all', methods=['POST'])
-@admin_required
-def delete_all_branches():
-    """Delete all branches and their associated subjects"""
-    try:
-        # Count before deletion
-        branch_count = Branch.query.count()
-        
-        # Delete all subjects first (all courses)
-        subject_count = Course.query.delete(synchronize_session=False)
-        
-        # Delete all branches
-        Branch.query.delete(synchronize_session=False)
-        
-        db.session.commit()
-        invalidate_cache('courses')
-        
-        return jsonify({
-            'success': True,
-            'message': f'Successfully deleted {branch_count} branches and {subject_count} subjects'
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/branches/<branch_code>/subjects/delete-all', methods=['POST'])
-@admin_required
-def delete_all_subjects_in_branch(branch_code):
-    """Delete all subjects in a specific branch"""
-    try:
-        branch = Branch.query.filter_by(code=branch_code).first()
-        if not branch:
-            return jsonify({'success': False, 'error': 'Branch not found'}), 404
-        
-        # Delete all subjects for this branch
-        deleted_count = Course.query.filter_by(
-            branch=branch.name, 
-            program=branch.program
-        ).delete(synchronize_session=False)
-        
-        db.session.commit()
-        invalidate_cache('courses')
-        
-        return jsonify({
-            'success': True,
-            'message': f'Successfully deleted {deleted_count} subjects from {branch.name}'
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # Faculty Management
