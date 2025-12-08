@@ -394,7 +394,7 @@ def generate_timetable_task(self, filters=None):
         
         # Generate new timetable
         generator = TimetableGenerator(db, courses=target_courses, groups=target_groups)
-        result = generator.generate()
+        result = generator.generate(filters or {})
         
         return result
     except Exception as e:
@@ -2337,7 +2337,7 @@ def generate_timetable():
             # Generate new timetable synchronously
             print("[GENERATE] Starting timetable generation...")
             generator = TimetableGenerator(db, courses=target_courses, groups=target_groups)
-            result = generator.generate()
+            result = generator.generate(filters or {})
             
             print(f"[GENERATE] Generation complete. Success: {result.get('success')}")
             print(f"[GENERATE] Entries created: {result.get('entries_created', 0)}")

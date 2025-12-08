@@ -138,6 +138,42 @@
             color: white;
         }
 
+        /* New Logo Styles */
+        .logo-wrapper {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+        }
+
+        .logo-main {
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            color: #001f3f;
+            /* Deep Navy */
+            letter-spacing: -0.5px;
+            line-height: 1;
+            margin-bottom: 3px;
+        }
+
+        .logo-main span {
+            color: #FF9933;
+            /* Saffron */
+        }
+
+        .logo-tagline {
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            color: #FF9933;
+            /* Saffron */
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            line-height: 1;
+        }
+
+        [data-theme="dark"] .logo-main {
+            color: #f8fafc;
+        }
+
         h2 {
             font-family: 'Rajdhani', sans-serif;
             font-weight: 700;
@@ -348,11 +384,16 @@
                 <div class="card login-card">
                     <div class="card-body">
                         <div class="logo-container">
-                            <div class="logo-icon">
-                                <i class="bi bi-calendar-week"></i>
+                            <div class="logo-wrapper justify-content-center mb-3">
+                                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Plansphere Icon"
+                                    class="logo-img" style="height: 60px;">
+                                <div class="logo-text-col text-start ms-3">
+                                    <div class="logo-main" style="font-size: 2.2rem;">Plansphere<span>.Ai</span></div>
+                                    <div class="logo-tagline" style="font-size: 0.7rem;">Timetabling Automation for
+                                        India</div>
+                                </div>
                             </div>
                             <h2>Welcome Back</h2>
-                            <p class="subtitle">Plansphere.ai</p>
                         </div>
 
                         {% with messages = get_flashed_messages(with_categories=true) %}

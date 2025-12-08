@@ -238,7 +238,10 @@ class TimetableGenerator:
 
             placed = False
             # Iterate slots in time order; optionally cap per-session slots for speed
-            slot_cap = self.config.get('max_slots_per_session', 12)
+            # Consider all slots unless explicitly capped in config
+            slot_cap = self.config.get('max_slots_per_session')
+            if not slot_cap or slot_cap <= 0:
+                slot_cap = len(time_slots)
             checked = 0
             for slot in time_slots:
                 if checked >= slot_cap:
@@ -872,13 +875,15 @@ class TimetableGenerator:
                 if not available_slots:
                     continue
                 # Optional pruning: limit slots considered per session to reduce vars
-                # Keep up to N earliest available slots to shrink search space
-                N = self.config.get('max_slots_per_session', 25)
+                # Default is to consider every available slot for complete week coverage
+                max_slots_limit = self.config.get('max_slots_per_session')
+                if not max_slots_limit or max_slots_limit <= 0:
+                    max_slots_limit = len(context["time_slots"])
                 limited_slots = []
                 for slot in context["time_slots"]:
                     if slot.id in available_slots:
                         limited_slots.append(slot)
-                        if len(limited_slots) >= N:
+                        if len(limited_slots) >= max_slots_limit:
                             break
 
                 for slot in limited_slots:
