@@ -338,19 +338,19 @@
                             <h6 id="selectedSemesterTitle">Semester 1</h6>
                             {% if user.role == 'admin' %}
                             <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-danger action-btn\"
-                                    onclick=\"deleteAllSubjects()">
+                                <button class="btn btn-sm btn-outline-danger action-btn"
+                                    onclick="deleteAllSubjects()">
                                     <i class="bi bi-trash"></i> Delete All
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary action-btn\"
-                                    onclick=\"triggerSubjectImport()">
+                                <button class="btn btn-sm btn-outline-secondary action-btn"
+                                    onclick="triggerSubjectImport()">
                                     <i class="bi bi-file-earmark-arrow-up"></i> Import (.csv/.xlsx)
                                 </button>
-                                <a class="btn btn-sm btn-outline-info action-btn\"
+                                <a class="btn btn-sm btn-outline-info action-btn"
                                     href="/download-template/courses?format=csv" target="_blank">
                                     <i class="bi bi-download"></i> Template
                                 </a>
-                                <button class="btn btn-sm btn-primary action-btn\" onclick=\"openAddSubjectModal()">
+                                <button class="btn btn-sm btn-primary action-btn" onclick="openAddSubjectModal()">
                                     <i class="bi bi-plus"></i> Add Subject
                                 </button>
                                 <input type="file" id="subjectImportFile" accept=".csv,.xls,.xlsx" style="display:none"
