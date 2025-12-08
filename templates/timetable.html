@@ -106,6 +106,32 @@
     </div>
 </div>
 
+<!-- Progress Bar for Timetable Generation -->
+<div id="generationProgressContainer" style="display: none;" class="row mb-4">
+    <div class="col-12">
+        <div class="card border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">
+                        <i class="bi bi-gear-fill"></i>
+                        <span id="progressTitle">Generating Timetable...</span>
+                    </h5>
+                    <span id="progressTime" class="badge bg-primary">0s</span>
+                </div>
+                <div class="progress" style="height: 30px;">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                        role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                        <span id="progressText" class="fw-bold">0%</span>
+                    </div>
+                </div>
+                <div id="progressStatus" class="mt-2 text-muted small">
+                    <i class="bi bi-info-circle"></i> Initializing scheduler...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% if warnings %}
 <div class="row mb-4">
     <div class="col-12">
@@ -406,6 +432,56 @@
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
         }
 
+        
+        // Show and initialize progress bar
+        const progressContainer = document.getElementById('generationProgressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const progressTime = document.getElementById('progressTime');
+        const progressStatus = document.getElementById('progressStatus');
+        const progressTitle = document.getElementById('progressTitle');
+        
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressBar.setAttribute('aria-valuenow', '0');
+        progressText.textContent = '0%';
+        progressTime.textContent = '0s';
+        progressStatus.innerHTML = '<i class="bi bi-info-circle"></i> Initializing scheduler...';
+        
+        // Time tracking
+        const startTime = Date.now();
+        let progress = 0;
+        const statusMessages = [
+            'Analyzing course requirements...',
+            'Checking faculty availability...',
+            'Allocating laboratory sessions...',
+            'Balancing workload distribution...',
+            'Optimizing room assignments...',
+            'Resolving scheduling conflicts...',
+            'Validating constraints...',
+            'Finalizing timetable...'
+        ];
+        
+        // Simulate progress updates
+        const progressInterval = setInterval(() => {
+            if (progress < 90) {
+                progress += Math.random() * 15;
+                if (progress > 90) progress = 90;
+                
+                const statusIndex = Math.floor((progress / 90) * statusMessages.length);
+                const currentStatus = statusMessages[Math.min(statusIndex, statusMessages.length - 1)];
+                
+                progressBar.style.width = progress + '%';
+                progressBar.setAttribute('aria-valuenow', Math.floor(progress));
+                progressText.textContent = Math.floor(progress) + '%';
+                progressStatus.innerHTML = `<i class="bi bi-gear-fill"></i> ${currentStatus}`;
+                
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                progressTime.textContent = elapsed + 's';
+            }
+        }, 500);
+
+
         // Build request payload with filters
         const payload = {};
         if (program) payload.program = program;
@@ -426,12 +502,28 @@
                 return response.json();
             })
             .then(data => {
+                clearInterval(progressInterval);
+                
+                // Complete progress
+                progressBar.style.width = '100%';
+                progressBar.setAttribute('aria-valuenow', '100');
+                progressText.textContent = '100%';
+                const totalTime = Math.floor((Date.now() - startTime) / 1000);
+                progressTime.textContent = totalTime + 's';
+                
+
                 if (btn) {
                     btn.disabled = false;
                     btn.innerHTML = originalText;
                 }
 
                 if (data.success) {
+                    progressBar.classList.remove('bg-success');
+                    progressBar.classList.add('bg-success');
+                    progressStatus.innerHTML = '<i class="bi bi-check-circle-fill"></i> Timetable generated successfully!';
+                    progressTitle.textContent = 'Generation Complete!';
+                    
+
                     // Handle both async (task_id) and sync (immediate result) responses
                     let message = '✓ ' + (data.message || 'Timetable generated successfully!');
 
@@ -446,6 +538,12 @@
                     // Reload after a short delay to show the toast
                     setTimeout(() => location.reload(), 1500);
                 } else {
+                    progressBar.classList.remove('bg-success');
+                    progressBar.classList.add('bg-danger');
+                    progressStatus.innerHTML = '<i class="bi bi-x-circle-fill"></i> Generation failed';
+                    progressTitle.textContent = 'Generation Failed';
+                    setTimeout(() => { progressContainer.style.display = 'none'; }, 3000);
+                    
                     const errorMsg = data.error || data.message || 'Failed to generate timetable';
                     UI.showToast('Error: ' + errorMsg, 'error');
 
@@ -455,6 +553,14 @@
                 }
             })
             .catch(err => {
+                clearInterval(progressInterval);
+                progressBar.classList.remove('bg-success');
+                progressBar.classList.add('bg-danger');
+                progressStatus.innerHTML = '<i class="bi bi-x-circle-fill"></i> Error: ' + err.message;
+                progressTitle.textContent = 'Generation Failed';
+                setTimeout(() => { progressContainer.style.display = 'none'; }, 3000);
+                
+
                 if (btn) {
                     btn.disabled = false;
                     btn.innerHTML = originalText;
