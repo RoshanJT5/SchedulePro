@@ -1089,7 +1089,7 @@ def delete_all_branches():
         
         return jsonify({
             'success': True,
-            'message': f'Successfully deleted {branch_count} branches and {subject_count} subjects'
+            'message': 'All branches deleted'
         })
     except Exception as e:
         db.session.rollback()
@@ -1146,7 +1146,8 @@ def delete_branch(branch_code):
         Branch.query.filter_by(code=branch_code).delete()
         
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Branch and all subjects deleted'})
+        invalidate_cache('courses')
+        return jsonify({'success': True, 'message': 'Branch deleted'})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1203,10 +1204,11 @@ def add_subject_to_branch(branch_code):
         
         db.session.add(subject)
         db.session.commit()
+        invalidate_cache('courses')
         
         return jsonify({
             'success': True,
-            'message': 'Subject added successfully',
+            'message': 'Subject added',
             'subject': {
                 'id': subject.id,
                 'code': subject.code,
@@ -1241,7 +1243,7 @@ def delete_all_subjects_in_branch(branch_code):
         
         return jsonify({
             'success': True,
-            'message': f'Successfully deleted {deleted_count} subjects from {branch.name}'
+            'message': 'All subjects deleted'
         })
     except Exception as e:
         db.session.rollback()
@@ -1265,10 +1267,11 @@ def delete_subject_from_branch(branch_code, subject_id):
         if subject.branch != branch.name or subject.program != branch.program:
             return jsonify({'success': False, 'error': 'Subject does not belong to this branch'}), 400
         
-        Course.query.filter_by(id=subject_id).delete()
+        Course.query.filter_by(id=subject_id).delete(synchronize_session=False)
         db.session.commit()
+        invalidate_cache('courses')
         
-        return jsonify({'success': True, 'message': 'Subject deleted successfully'})
+        return jsonify({'success': True, 'message': 'Subject deleted'})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500

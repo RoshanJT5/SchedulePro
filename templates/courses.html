@@ -338,14 +338,16 @@
                             <h6 id="selectedSemesterTitle">Semester 1</h6>
                             {% if user.role == 'admin' %}
                             <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-danger action-btn\" onclick=\"deleteAllSubjects()">
+                                <button class="btn btn-sm btn-outline-danger action-btn\"
+                                    onclick=\"deleteAllSubjects()">
                                     <i class="bi bi-trash"></i> Delete All
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary action-btn\" onclick=\"triggerSubjectImport()">
+                                <button class="btn btn-sm btn-outline-secondary action-btn\"
+                                    onclick=\"triggerSubjectImport()">
                                     <i class="bi bi-file-earmark-arrow-up"></i> Import (.csv/.xlsx)
                                 </button>
-                                <a class="btn btn-sm btn-outline-info action-btn\" href="/download-template/courses?format=csv"
-                                    target="_blank">
+                                <a class="btn btn-sm btn-outline-info action-btn\"
+                                    href="/download-template/courses?format=csv" target="_blank">
                                     <i class="bi bi-download"></i> Template
                                 </a>
                                 <button class="btn btn-sm btn-primary action-btn\" onclick=\"openAddSubjectModal()">
@@ -427,6 +429,37 @@
 
 {% block scripts %}
 <script>
+    // UI Helper for toast notifications
+    const UI = {
+        showToast: function (message, type = 'info') {
+            // Create toast container if it doesn't exist
+            let container = document.querySelector('.toast-container-custom');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'toast-container-custom position-fixed top-0 end-0 p-3';
+                container.style.zIndex = '9999';
+                document.body.appendChild(container);
+            }
+
+            // Create toast element
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} alert-dismissible fade show`;
+            toast.setAttribute('role', 'alert');
+            toast.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+
+            container.appendChild(toast);
+
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 150);
+            }, 3000);
+        }
+    };
+
     let currentBranchCode = null;
     let currentSemester = 1;
     let branchData = {{ branch_structure| tojson | safe }};
