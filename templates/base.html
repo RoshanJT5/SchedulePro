@@ -164,15 +164,70 @@
             font-family: 'Rajdhani', sans-serif;
             font-weight: 700;
             font-size: 1.5rem;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            /* Removed gradient background to support custom logo structure */
+            color: var(--text-primary);
             transition: all 0.3s ease;
+            padding: 0;
+            display: flex;
+            align-items: center;
         }
 
         .navbar-brand:hover {
-            transform: scale(1.05);
+            transform: scale(1.02);
+        }
+
+        /* ===== New Logo Styles ===== */
+        .logo-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none !important;
+        }
+
+        .logo-img {
+            height: 45px;
+            width: auto;
+            object-fit: contain;
+            /* Optional: Add a subtle drop shadow */
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+        }
+
+        .logo-text-col {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .logo-main {
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 1.8rem;
+            color: #001f3f;
+            /* Deep Navy from image */
+            letter-spacing: -0.5px;
+            margin-bottom: 2px;
+        }
+
+        .logo-main span {
+            color: #FF9933;
+            /* Saffron from image */
+        }
+
+        .logo-tagline {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: #FF9933;
+            /* Saffron */
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        /* Dark Mode Adjustments for Logo */
+        [data-theme="dark"] .logo-main {
+            color: #f8fafc;
+            /* White text for contrast */
         }
 
         .nav-link {
@@ -830,8 +885,12 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
-            <a class="navbar-brand p-0" href="/">
-                <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Plansphere.Ai" style="height: 50px; object-fit: contain;">
+            <a class="navbar-brand logo-wrapper" href="/">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Plansphere Icon" class="logo-img">
+                <div class="logo-text-col">
+                    <div class="logo-main">Plansphere<span>.Ai</span></div>
+                    <div class="logo-tagline">Timetabling Automation for India</div>
+                </div>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
