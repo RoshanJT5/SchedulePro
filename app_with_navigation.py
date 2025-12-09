@@ -2266,7 +2266,7 @@ def add_student_group():
         description=data.get('description', ''),
         program=data.get('program', '').strip() or None,
         branch=data.get('branch', '').strip() or None,
-        current_semester=parse_int(data.get('current_semester'), 0),
+        current_semester=parse_int(data.get('semester') or data.get('current_semester'), 0),
         total_students=total_students,
         batches=batches_json
     )
@@ -2788,6 +2788,35 @@ def generate_timetable():
                 target_groups = group_query.all()
                 
                 print(f"[GENERATE] Filtered to {len(target_courses) if target_courses else 0} courses and {len(target_groups) if target_groups else 0} groups")
+                
+                # Debug: Show what was found
+                if target_courses:
+                    print(f"[GENERATE] Courses found: {[f'{c.code} (Sem {c.semester})' for c in target_courses[:10]]}")
+                else:
+                    print(f"[GENERATE] ⚠️  WARNING: No courses found for filters: {filters}")
+                    
+                if target_groups:
+                    print(f"[GENERATE] Groups found: {[f'{g.name} (Sem {g.semester})' for g in target_groups]}")
+                else:
+                    print(f"[GENERATE] ⚠️  WARNING: No student groups found for filters: {filters}")
+                    
+                # Check if we have both courses and groups
+                if not target_courses or not target_groups:
+                    error_msg = []
+                    if not target_courses:
+                        error_msg.append(f"No courses found for Program='{filters.get('program', 'Any')}', Branch='{filters.get('branch', 'Any')}', Semester={filters.get('semester', 'Any')}")
+                    if not target_groups:
+                        error_msg.append(f"No student groups found for Program='{filters.get('program', 'Any')}', Branch='{filters.get('branch', 'Any')}', Semester={filters.get('semester', 'Any')}")
+                    
+                    return jsonify({
+                        'success': False,
+                        'error': 'Cannot generate timetable: ' + ' AND '.join(error_msg),
+                        'details': {
+                            'filters': filters,
+                            'courses_found': len(target_courses) if target_courses else 0,
+                            'groups_found': len(target_groups) if target_groups else 0
+                        }
+                    }), 400
             
             # Generate new timetable synchronously
             print("[GENERATE] Starting timetable generation...")
