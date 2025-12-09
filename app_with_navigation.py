@@ -15,6 +15,13 @@ import secrets
 import math
 import os
 
+# Optional pandas for Excel support
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+
 from csv_processor import process_upload_stream, get_missing_columns
 from pymongo.errors import DuplicateKeyError as IntegrityError
 import warnings
@@ -730,18 +737,23 @@ def download_template(entity):
 
     if entity == 'courses':
         columns = ['code', 'name', 'credits', 'hours_per_week', 'course_type', 'subject_type', 'program', 'branch', 'semester', 'required_room_tags']
+        example = ['CS101', 'Introduction to Programming', '4', '5', 'Theory', 'Major', 'B.Tech', 'Computer Science', '1', 'projector,computer']
         filename_base = 'courses_template'
     elif entity == 'faculty':
         columns = ['name', 'username', 'email', 'expertise', 'password', 'min_hours_per_week', 'max_hours_per_week', 'availability']
+        example = ['Dr. John Smith', 'john.smith', 'john.smith@university.edu', 'cs101,cs102,math101', 'password123', '8', '16', '{"Monday": [1,2,3,4,5], "Tuesday": [1,2,3,4,5]}']
         filename_base = 'faculty_template'
     elif entity == 'rooms':
         columns = ['name', 'capacity', 'room_type', 'equipment', 'tags']
+        example = ['Lab-101', '30', 'lab', 'Computers,Projector', 'computer,projector,lab']
         filename_base = 'rooms_template'
     elif entity == 'students':
         columns = ['student_id', 'name', 'username', 'password', 'enrolled_courses']
+        example = ['2023001', 'Alice Johnson', 'alice.johnson', 'password123', 'cs101,math101,phy101']
         filename_base = 'students_template'
     elif entity == 'student-groups':
         columns = ['name', 'description', 'program', 'branch', 'semester', 'total_students', 'batches', 'batches_students']
+        example = ['CS-A', 'Computer Science Section A', 'B.Tech', 'Computer Science', '1', '60', '2', '30,30']
         filename_base = 'student_groups_template'
 
     if fmt == 'csv':
@@ -750,6 +762,7 @@ def download_template(entity):
         import csv as _csv
         writer = _csv.writer(output)
         writer.writerow(columns)
+        writer.writerow(example)  # Add example data row
         mem = io.BytesIO()
         mem.write(output.getvalue().encode('utf-8'))
         mem.seek(0)
@@ -757,7 +770,19 @@ def download_template(entity):
 
     elif fmt in ('xls', 'xlsx'):
         # Use pandas to create an Excel file in-memory. Try available engines.
-        df = pd.DataFrame(columns=columns)
+        if not PANDAS_AVAILABLE:
+            # Fallback to CSV if pandas not available
+            output = io.StringIO()
+            import csv as _csv
+            writer = _csv.writer(output)
+            writer.writerow(columns)
+            writer.writerow(example)  # Add example data row
+            mem2 = io.BytesIO()
+            mem2.write(output.getvalue().encode('utf-8'))
+            mem2.seek(0)
+            return send_file(mem2, mimetype='text/csv', as_attachment=True, download_name=f"{filename_base}.csv")
+        
+        df = pd.DataFrame([example], columns=columns)  # Create DataFrame with example data
         mem = io.BytesIO()
         engines_to_try = ['xlsxwriter', 'openpyxl']
         writer_used = None
@@ -779,6 +804,7 @@ def download_template(entity):
             import csv as _csv
             writer = _csv.writer(output)
             writer.writerow(columns)
+            writer.writerow(example)  # Add example data row
             mem2 = io.BytesIO()
             mem2.write(output.getvalue().encode('utf-8'))
             mem2.seek(0)
