@@ -1530,21 +1530,9 @@ def delete_faculty(faculty_id):
     db.session.delete(faculty)
     if linked_user and linked_user.role == 'teacher':
         db.session.delete(linked_user)
-    data = request.json or {}
-    availability_payload = data.get('availability', {})
-    
-    # Validate availability meets 70% threshold
-    is_valid, error_msg, percentage = validate_faculty_availability(availability_payload)
-    if not is_valid:
-        return jsonify({'success': False, 'error': error_msg}), 400
-    
-    if isinstance(availability_payload, (dict, list)):
-        availability_payload = json.dumps(availability_payload)
-    elif not isinstance(availability_payload, str):
-        availability_payload = '{}'
-    faculty.availability = availability_payload
     db.session.commit()
-    return jsonify({'success': True, 'message': f'Availability saved successfully ({percentage:.1f}% available)'})
+    invalidate_cache('faculty')
+    return jsonify({'success': True})
 
 @app.route('/faculty/import', methods=['POST'])
 @admin_required
