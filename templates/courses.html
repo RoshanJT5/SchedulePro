@@ -317,7 +317,7 @@
 
 <!-- Branch Detail Modal -->
 <div class="modal fade branch-modal" id="branchDetailModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="branchDetailTitle">Branch Name</h5>
@@ -359,15 +359,16 @@
                             {% endif %}
                         </div>
 
-                        <table class="table table-hover subjects-table">
+                        <table class="table table-hover subjects-table" style="min-width: 100%;">
                             <thead>
                                 <tr>
-                                    <th>Code</th>
-                                    <th>Subject Name</th>
-                                    <th>Type</th>
-                                    <th>Credits</th>
+                                    <th style="width: 10%;">Code</th>
+                                    <th style="width: 30%;">Subject Name</th>
+                                    <th style="width: 18%;">Subject Type</th>
+                                    <th style="width: 15%;">Type</th>
+                                    <th style="width: 10%;">Credits</th>
                                     {% if user.role == 'admin' %}
-                                    <th></th>
+                                    <th style="width: 10%;"></th>
                                     {% endif %}
                                 </tr>
                             </thead>
@@ -573,16 +574,48 @@
     function loadSemesterSubjects(semester) {
         const structure = branchData[currentBranchCode];
         const subjects = structure.subjects_by_semester[semester] || [];
+        
+        // Debug: log ALL subjects to verify subject_type is present
+        console.log(`Loading ${subjects.length} subjects for semester ${semester}`);
+        subjects.forEach((subject, index) => {
+            console.log(`Subject ${index + 1}:`, {
+                code: subject.code,
+                name: subject.name,
+                subject_type: subject.subject_type,
+                course_type: subject.course_type
+            });
+        });
 
         let html = '';
         if (subjects.length === 0) {
-            html = '<tr><td colspan="5" class="text-center text-muted">No subjects added yet</td></tr>';
+            html = '<tr><td colspan="6" class="text-center text-muted">No subjects added yet</td></tr>';
         } else {
             subjects.forEach(subject => {
+                // Map subject_type to display labels
+                const subjectTypeLabels = {
+                    'major': 'Major',
+                    'minor': 'Minor',
+                    'md': 'MD',
+                    'ae': 'AE',
+                    'se': 'SE',
+                    'va': 'VA'
+                };
+                const subjectTypeColors = {
+                    'major': 'bg-primary',
+                    'minor': 'bg-secondary',
+                    'md': 'bg-success',
+                    'ae': 'bg-info',
+                    'se': 'bg-warning text-dark',
+                    'va': 'bg-danger'
+                };
+                const subjectTypeLabel = subject.subject_type ? subjectTypeLabels[subject.subject_type] || subject.subject_type : '-';
+                const subjectTypeColor = subject.subject_type ? subjectTypeColors[subject.subject_type] || 'bg-secondary' : '';
+                
                 html += `
                     <tr>
                         <td><strong>${subject.code}</strong></td>
                         <td>${subject.name}</td>
+                        <td>${subject.subject_type ? `<span class="badge ${subjectTypeColor}">${subjectTypeLabel}</span>` : '<span class="text-muted">-</span>'}</td>
                         <td><span class="badge ${subject.course_type === 'practical' ? 'bg-warning' : 'bg-info'}">${subject.course_type}</span></td>
                         <td>${subject.credits || '-'}</td>
                         {% if user.role == 'admin' %}

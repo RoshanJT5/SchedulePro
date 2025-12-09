@@ -326,12 +326,14 @@ class Course(BaseModel):
         if not hasattr(self, 'program'): self.program = None
         if not hasattr(self, 'semester'): self.semester = None
         if not hasattr(self, 'branch'): self.branch = None
+        if not hasattr(self, 'subject_type'): self.subject_type = None
 
     def to_dict(self):
         d = super().to_dict()
         d['program'] = getattr(self, 'program', None)
         d['semester'] = getattr(self, 'semester', None)
         d['branch'] = getattr(self, 'branch', None)
+        d['subject_type'] = getattr(self, 'subject_type', None)
         return d
 
     def __repr__(self):

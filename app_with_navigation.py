@@ -863,6 +863,7 @@ def courses():
                     'name': s.name,
                     'credits': getattr(s, 'credits', 0),
                     'course_type': getattr(s, 'course_type', 'theory'),
+                    'subject_type': getattr(s, 'subject_type', None),
                     'hours_per_week': getattr(s, 'hours_per_week', 0)
                 }
                 for s in semester_subjects
@@ -1129,6 +1130,7 @@ def get_branch(branch_code):
                 'name': s.name,
                 'credits': getattr(s, 'credits', 0),
                 'course_type': getattr(s, 'course_type', 'theory'),
+                'subject_type': getattr(s, 'subject_type', None),
                 'hours_per_week': getattr(s, 'hours_per_week', 0)
             }
             for s in semester_subjects
@@ -1209,6 +1211,7 @@ def add_subject_to_branch(branch_code):
             semester=semester,
             credits=int(data.get('credits', 3)),
             course_type=data.get('type', 'theory').lower(),
+            subject_type=data.get('subject_type'),
             hours_per_week=int(data.get('hours_per_week', 3)),
             required_room_tags=data.get('required_room_tags', '')
         )
@@ -1226,7 +1229,8 @@ def add_subject_to_branch(branch_code):
                 'name': subject.name,
                 'semester': subject.semester,
                 'credits': subject.credits,
-                'course_type': subject.course_type
+                'course_type': subject.course_type,
+                'subject_type': subject.subject_type
             }
         })
     except Exception as e:
