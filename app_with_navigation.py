@@ -729,7 +729,7 @@ def download_template(entity):
         abort(404)
 
     if entity == 'courses':
-        columns = ['code', 'name', 'credits', 'hours_per_week', 'course_type', 'program', 'branch', 'semester', 'required_room_tags']
+        columns = ['code', 'name', 'credits', 'hours_per_week', 'course_type', 'subject_type', 'program', 'branch', 'semester', 'required_room_tags']
         filename_base = 'courses_template'
     elif entity == 'faculty':
         columns = ['name', 'username', 'email', 'expertise', 'password', 'min_hours_per_week', 'max_hours_per_week', 'availability']

@@ -402,6 +402,18 @@
                         <input type="text" class="form-control" name="code" placeholder="e.g., CS101" required>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Select Subject Type *</label>
+                        <select class="form-select" name="subject_type" required>
+                            <option value="">-- Select Type --</option>
+                            <option value="major">Major</option>
+                            <option value="minor">Minor</option>
+                            <option value="md">Multidisciplinary (MD)</option>
+                            <option value="ae">Ability Enhancement (AE)</option>
+                            <option value="se">Skill Enhancement (SE)</option>
+                            <option value="va">Value Added (VA)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Type *</label>
                         <select class="form-select" name="type" required>
                             <option value="theory">Theory</option>
