@@ -72,6 +72,9 @@
                                 {% endif %}
                             </td>
                             <td>
+                                <button class="btn btn-sm btn-outline-primary me-2" onclick="openEditGroupModal({{ group.id }}, '{{ group.name }}', '{{ group.description or '' }}', {{ group.total_students or 0 }})">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </button>
                                 <button class="btn btn-sm btn-danger" onclick="deleteGroup({{ group.id }})">
                                     <i class="bi bi-trash"></i> Delete
                                 </button>
@@ -165,6 +168,39 @@
         </div>
     </div>
 </div>
+
+<!-- Edit Group Modal -->
+<div class="modal fade" id="editGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Student Group</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editGroupForm">
+                    <input type="hidden" id="editGroupId">
+                    <div class="mb-3">
+                        <label class="form-label">Group Name *</label>
+                        <input type="text" class="form-control" id="editGroupName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="editGroupDescription" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Total Students</label>
+                        <input type="number" class="form-control" id="editGroupTotalStudents" min="0">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitEditGroup()">Update Group</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -195,6 +231,50 @@
                 } else {
                     alert('Error: ' + (data.error || 'Failed to add group'));
                 }
+            });
+    }
+
+    function openEditGroupModal(id, name, description, totalStudents) {
+        document.getElementById('editGroupId').value = id;
+        document.getElementById('editGroupName').value = name;
+        document.getElementById('editGroupDescription').value = description;
+        document.getElementById('editGroupTotalStudents').value = totalStudents;
+        
+        new bootstrap.Modal(document.getElementById('editGroupModal')).show();
+    }
+
+    function submitEditGroup() {
+        const form = document.getElementById('editGroupForm');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const id = document.getElementById('editGroupId').value;
+        const payload = {
+            name: document.getElementById('editGroupName').value,
+            description: document.getElementById('editGroupDescription').value,
+            total_students: parseInt(document.getElementById('editGroupTotalStudents').value) || 0
+        };
+
+        fetch(`/api/student-group/${id}/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Student group updated successfully');
+                    bootstrap.Modal.getInstance(document.getElementById('editGroupModal')).hide();
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to update group'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to update group');
             });
     }
 

@@ -438,6 +438,62 @@
         </div>
     </div>
 </div>
+
+<!-- Edit Subject Modal -->
+<div class="modal fade" id="editSubjectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Subject</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editSubjectForm">
+                    <input type="hidden" id="editSubjectId" name="subject_id">
+                    <div class="mb-3">
+                        <label class="form-label">Subject Name *</label>
+                        <input type="text" class="form-control" id="editSubjectName" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Subject Code *</label>
+                        <input type="text" class="form-control" id="editSubjectCode" name="code" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Select Subject Type *</label>
+                        <select class="form-select" id="editSubjectType" name="subject_type" required>
+                            <option value="">-- Select Type --</option>
+                            <option value="major">Major</option>
+                            <option value="minor">Minor</option>
+                            <option value="md">Multidisciplinary (MD)</option>
+                            <option value="ae">Ability Enhancement (AE)</option>
+                            <option value="se">Skill Enhancement (SE)</option>
+                            <option value="va">Value Added (VA)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type *</label>
+                        <select class="form-select" id="editCourseType" name="type" required>
+                            <option value="theory">Theory</option>
+                            <option value="practical">Practical</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Credits *</label>
+                        <input type="number" class="form-control" id="editCredits" name="credits" min="1" max="10" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Hours Per Week</label>
+                        <input type="number" class="form-control" id="editHoursPerWeek" name="hours_per_week" min="1" max="10">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitEditSubject()">Update Subject</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -620,6 +676,9 @@
                         <td>${subject.credits || '-'}</td>
                         {% if user.role == 'admin' %}
                         <td>
+                            <button class="btn btn-sm btn-outline-primary me-2" onclick="openEditSubjectModal(${subject.id}, '${subject.code}', '${subject.name}', '${subject.subject_type || ''}', '${subject.course_type}', ${subject.credits || 0}, ${subject.hours_per_week || 0})">
+                                <i class="bi bi-pencil"></i> Edit
+                            </button>
                             <span class="delete-subject-btn" onclick="deleteSubject(${subject.id})">Delete</span>
                         </td>
                         {% endif %}
@@ -698,6 +757,64 @@
                 } else {
                     UI.showToast('Error: ' + (data.error || 'Failed to add subject'), 'error');
                 }
+            });
+    }
+
+    // Open edit subject modal
+    function openEditSubjectModal(subjectId, code, name, subjectType, courseType, credits, hoursPerWeek) {
+        // Close branch detail modal temporarily
+        bootstrap.Modal.getInstance(document.getElementById('branchDetailModal')).hide();
+
+        // Populate form fields
+        document.getElementById('editSubjectId').value = subjectId;
+        document.getElementById('editSubjectCode').value = code;
+        document.getElementById('editSubjectName').value = name;
+        document.getElementById('editSubjectType').value = subjectType || '';
+        document.getElementById('editCourseType').value = courseType;
+        document.getElementById('editCredits').value = credits || 3;
+        document.getElementById('editHoursPerWeek').value = hoursPerWeek || 3;
+
+        // Show edit subject modal
+        new bootstrap.Modal(document.getElementById('editSubjectModal')).show();
+    }
+
+    // Submit edit subject
+    function submitEditSubject() {
+        const form = document.getElementById('editSubjectForm');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const subjectId = document.getElementById('editSubjectId').value;
+        const formData = {
+            name: document.getElementById('editSubjectName').value,
+            code: document.getElementById('editSubjectCode').value,
+            subject_type: document.getElementById('editSubjectType').value,
+            type: document.getElementById('editCourseType').value,
+            credits: parseInt(document.getElementById('editCredits').value),
+            hours_per_week: parseInt(document.getElementById('editHoursPerWeek').value)
+        };
+
+        fetch(`/api/subject/${subjectId}/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    UI.showToast('Subject updated successfully!', 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('editSubjectModal')).hide();
+                    // Reload the branch data
+                    location.reload();
+                } else {
+                    UI.showToast('Error: ' + (data.error || 'Failed to update subject'), 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                UI.showToast('Failed to update subject', 'error');
             });
     }
 

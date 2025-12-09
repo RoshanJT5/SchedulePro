@@ -32,7 +32,7 @@ class Session:
 
 class TimetableGenerator:
     """
-    Enhanced Hybrid scheduler with 9 advanced constraints:
+    Enhanced Hybrid scheduler with 12 advanced constraints:
     
     1. Automatic faculty workload management (min/max bounds)
     2. Priority lab allocation for courses requiring labs
@@ -43,6 +43,9 @@ class TimetableGenerator:
     7. Automatic daily lecture & lab tracking per faculty
     8. Multi-course faculty scheduling with cross-course coordination
     9. Overwork detection & alerts (40+ hours/week warning)
+    10. No consecutive same lectures in a day (prevents student boredom)
+    11. Avoid same lab on same day (distributes labs across week)
+    12. Maximum 2-3 labs per day per group (configurable, prevents overload)
     """
 
     def __init__(self, db_session, random_seed: int | None = None, config: dict = None, courses=None, groups=None):
@@ -311,6 +314,14 @@ class TimetableGenerator:
         used_room_slot = defaultdict(set)       # (slot_id) -> {room_id}
         group_day_count = defaultdict(lambda: defaultdict(int))  # group -> day -> count
         faculty_hours = defaultdict(int)
+        
+        # NEW CONSTRAINT TRACKERS
+        # Track course placements per group per day: group -> day -> {course_id}
+        group_day_courses = defaultdict(lambda: defaultdict(set))
+        # Track course placements per group per day per period: group -> day -> period -> course_id
+        group_day_period_course = defaultdict(lambda: defaultdict(dict))
+        # Track lab count per group per day: group -> day -> lab_count
+        group_day_lab_count = defaultdict(lambda: defaultdict(int))
 
         # Index rooms by type for graceful fallbacks
         rooms_by_type = {
@@ -322,9 +333,22 @@ class TimetableGenerator:
         sessions = list(context["sessions"]) or []
         sessions.sort(key=lambda s: (0 if s.is_lab else 1, s.course_code))
         
-        # OPTIMIZATION: Smart slot ordering - labs prefer morning, theory prefers afternoon
-        slots_lab_order = sorted(time_slots, key=lambda s: (s.day, s.period))  # Morning first for labs
-        slots_theory_order = sorted(time_slots, key=lambda s: (s.day, -s.period))  # Afternoon first for theory
+        # OPTIMIZATION: Sequential slot filling to minimize blank periods
+        # Fill slots in order (day by day, period by period) to reduce gaps
+        slots_sequential = sorted(time_slots, key=lambda s: (s.day, s.period))  # Sequential filling
+        
+        # Get available days and calculate target fill per day (70% minimum)
+        available_days = list(set(slot.day for slot in time_slots))
+        days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        available_days.sort(key=lambda d: days_order.index(d) if d in days_order else 999)
+        
+        # Calculate periods per day
+        periods_per_day_map = defaultdict(int)
+        for slot in time_slots:
+            periods_per_day_map[slot.day] += 1
+        
+        total_sessions = len(sessions)
+        min_fill_per_day = {day: max(1, int(periods_per_day_map[day] * 0.7)) for day in available_days}  # 70% minimum
 
         # Iterate each session and place it
         for session in sessions:
@@ -353,8 +377,143 @@ class TimetableGenerator:
                     warnings.append(f"⚠️ No rooms available to place course {course.code}")
                     continue
 
-            # OPTIMIZATION: Smart slot ordering based on session type
-            slot_order = slots_lab_order if session.is_lab else slots_theory_order
+            # OPTIMIZATION: 70% fill rate + NO consecutive blank periods (must have 1 filled gap between blanks)
+            # Strategy: Distribute evenly across all days, ensure 70% fill, prevent consecutive blanks
+            group_occupied_slots = used_group_slot[session.student_group]
+            
+            # Count how many classes each day has for this group
+            group_day_usage = defaultdict(int)
+            group_days_used = set()
+            group_periods_by_day = defaultdict(list)  # Track which periods are occupied on each day
+            
+            for occupied_slot_id in group_occupied_slots:
+                occupied_slot = slot_by_id.get(occupied_slot_id)
+                if occupied_slot:
+                    group_day_usage[occupied_slot.day] += 1
+                    group_days_used.add(occupied_slot.day)
+                    group_periods_by_day[occupied_slot.day].append(occupied_slot.period)
+            
+            # Sort periods for each day to detect gaps
+            for day in group_periods_by_day:
+                group_periods_by_day[day].sort()
+            
+            # Calculate which days are under-filled (below 70% target)
+            underfilled_days = set()
+            for day in available_days:
+                if group_day_usage[day] < min_fill_per_day[day]:
+                    underfilled_days.add(day)
+            
+            # Check if adding this slot would create consecutive blank periods
+            def would_create_consecutive_blanks(slot, occupied_periods):
+                """Check if NOT placing in this slot would create 2+ consecutive blanks"""
+                if not occupied_periods:
+                    return False
+                
+                # Get all periods for this day
+                day_periods = [s.period for s in time_slots if s.day == slot.day]
+                if not day_periods:
+                    return False
+                
+                min_period = min(day_periods)
+                max_period = max(day_periods)
+                
+                # Check periods around this slot
+                # If slot.period-1 and slot.period+1 are both blank, this creates isolated blank
+                prev_occupied = (slot.period - 1) in occupied_periods or slot.period - 1 < min_period
+                next_occupied = (slot.period + 1) in occupied_periods or slot.period + 1 > max_period
+                
+                # If neither neighbor would be occupied, check for consecutive blanks
+                if not prev_occupied and not next_occupied:
+                    # This would create a gap with no filled period between blanks
+                    return False
+                
+                # Check if skipping this slot creates 2+ consecutive blanks between occupied periods
+                for i in range(len(occupied_periods) - 1):
+                    # Check gap between consecutive occupied periods
+                    if occupied_periods[i] < slot.period < occupied_periods[i + 1]:
+                        gap_size = occupied_periods[i + 1] - occupied_periods[i] - 1
+                        if gap_size >= 2:
+                            # There's a gap with 2+ blanks, this slot must be filled
+                            return True
+                
+                return False
+            
+            # Detect gap slots (blank periods between occupied periods that would violate the rule)
+            def is_critical_gap_filler(slot):
+                """Check if this slot MUST be filled to prevent consecutive blanks"""
+                if slot.day not in group_periods_by_day:
+                    return False
+                
+                occupied_periods = group_periods_by_day[slot.day]
+                if len(occupied_periods) < 2:
+                    return False
+                
+                # Check if slot fills a gap that would otherwise have consecutive blanks
+                for i in range(len(occupied_periods) - 1):
+                    if occupied_periods[i] < slot.period < occupied_periods[i + 1]:
+                        gap_size = occupied_periods[i + 1] - occupied_periods[i] - 1
+                        # If gap is exactly 2, we MUST fill one to avoid consecutive blanks
+                        if gap_size == 2:
+                            return True
+                        # If gap is 3+, filling this helps but isn't critical yet
+                        if gap_size >= 3:
+                            return True
+                return False
+            
+            # Smart slot ordering: 70% fill + prevent consecutive blanks
+            def slot_priority(slot):
+                day_idx = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].index(slot.day) if slot.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] else 0
+                
+                day_has_classes = slot.day in group_days_used
+                classes_on_this_day = group_day_usage.get(slot.day, 0)
+                is_underfilled = slot.day in underfilled_days
+                is_critical_filler = is_critical_gap_filler(slot)
+                
+                # Calculate proximity to already scheduled slots on SAME day
+                same_day_proximity = 0
+                if day_has_classes:
+                    occupied_periods = group_periods_by_day[slot.day]
+                    
+                    # Check if this slot is between two occupied periods (gap filler)
+                    is_between = any(occupied_periods[i] < slot.period < occupied_periods[i+1] 
+                                   for i in range(len(occupied_periods)-1)) if len(occupied_periods) >= 2 else False
+                    
+                    # Calculate distance to nearest occupied period
+                    min_distance = min([abs(slot.period - p) for p in occupied_periods]) if occupied_periods else 999
+                    
+                    if min_distance == 1:
+                        same_day_proximity = 2000  # Immediately adjacent
+                    elif min_distance == 2:
+                        same_day_proximity = 1000  # One slot gap
+                    elif is_between:
+                        same_day_proximity = 800   # Between two classes (fill the gap)
+                    elif min_distance <= 3:
+                        same_day_proximity = 400   # Close proximity
+                    else:
+                        same_day_proximity = 100   # Same day
+                
+                # Priority levels:
+                # -2: CRITICAL - Must fill to prevent consecutive blanks
+                # -1: URGENT - Underfilled days with gaps that need filling
+                #  0: HIGH - Underfilled days with adjacent slots
+                #  1: MEDIUM - Empty underfilled days (start new sequence)
+                #  2: NORMAL - Days with classes (continue filling)
+                #  3: LOW - Sequential filling
+                
+                if is_critical_filler:
+                    return (-2, -same_day_proximity, slot.period)
+                elif is_underfilled and day_has_classes and same_day_proximity >= 800:
+                    return (-1, -same_day_proximity, -classes_on_this_day, slot.period)
+                elif is_underfilled and day_has_classes:
+                    return (0, -same_day_proximity, -classes_on_this_day, slot.period)
+                elif is_underfilled and not day_has_classes:
+                    return (1, day_idx, slot.period)
+                elif day_has_classes and same_day_proximity >= 1000:
+                    return (2, -same_day_proximity, slot.period)
+                else:
+                    return (3, day_idx, slot.period)
+            
+            slot_order = sorted(slots_sequential, key=slot_priority)
             
             placed = False
             # OPTIMIZATION: Early exit - break immediately when placed
@@ -367,6 +526,74 @@ class TimetableGenerator:
                     continue
                 if max_per_day is not None and group_day_count[session.student_group][day] >= max_per_day:
                     continue
+                
+                # NEW CONSTRAINT 1: No consecutive same lectures in a day
+                # Check if placing this course in this period would create consecutive same course
+                if slot.period > 1:  # Check previous period
+                    prev_course = group_day_period_course[session.student_group][day].get(slot.period - 1)
+                    if prev_course == course.id:
+                        continue  # Skip: would create consecutive same course
+                
+                # Also check next period to avoid boxing in
+                if slot.period < max(periods_per_day_map.values()):
+                    next_course = group_day_period_course[session.student_group][day].get(slot.period + 1)
+                    if next_course == course.id:
+                        continue  # Skip: would create consecutive same course
+                
+                # NEW CONSTRAINT 2: Avoid same lab on same day (soft constraint - prefer not to schedule)
+                if session.is_lab:
+                    # Check if this course already has a lab scheduled on this day
+                    if course.id in group_day_courses[session.student_group][day]:
+                        # Check if there's a lab already scheduled for this course today
+                        already_has_lab_today = any(
+                            group_day_period_course[session.student_group][day].get(p) == course.id
+                            for p in group_day_period_course[session.student_group][day].keys()
+                        )
+                        if already_has_lab_today:
+                            # Try to find another day first (soft constraint)
+                            # We'll only allow if no other day is available (checked later)
+                            has_other_day_option = any(
+                                other_slot.day != day and 
+                                other_slot.id not in used_group_slot[session.student_group]
+                                for other_slot in slot_order[:20]  # Check first 20 slots
+                            )
+                            if has_other_day_option:
+                                continue  # Skip this day, prefer another day
+                    
+                    # NEW CONSTRAINT 3: Maximum 2-3 labs per day
+                    current_lab_count = group_day_lab_count[session.student_group][day]
+                    max_labs_per_day = self.config.get('max_labs_per_day', 3)  # Default 3, configurable
+                    if current_lab_count >= max_labs_per_day:
+                        continue  # Skip: too many labs on this day already
+                
+                # CRITICAL VALIDATION: Check if placing here would create consecutive blanks
+                # Get current occupied periods for this group on this day
+                current_day_periods = sorted([slot_by_id[sid].period for sid in used_group_slot[session.student_group] 
+                                             if slot_by_id.get(sid) and slot_by_id[sid].day == day])
+                
+                # Simulate adding this slot
+                simulated_periods = sorted(current_day_periods + [slot.period])
+                
+                # Check for consecutive blanks in the range of occupied periods
+                if len(simulated_periods) >= 2:
+                    min_occupied = simulated_periods[0]
+                    max_occupied = simulated_periods[-1]
+                    
+                    # Check all gaps between occupied periods
+                    has_consecutive_blanks = False
+                    for i in range(len(simulated_periods) - 1):
+                        gap_start = simulated_periods[i]
+                        gap_end = simulated_periods[i + 1]
+                        gap_size = gap_end - gap_start - 1
+                        
+                        # If gap has 2+ consecutive blank periods, this is invalid
+                        if gap_size >= 2:
+                            has_consecutive_blanks = True
+                            break
+                    
+                    # Skip this slot if it would create or maintain consecutive blanks
+                    if has_consecutive_blanks:
+                        continue
 
                 # Try faculty in order (already sorted by workload)
                 for fac in cand_faculty:
@@ -401,6 +628,13 @@ class TimetableGenerator:
                     used_room_slot[slot_id].add(room_found.id)
                     group_day_count[session.student_group][day] += 1
                     faculty_hours[fac.id] += 1
+                    
+                    # Update new constraint trackers
+                    group_day_courses[session.student_group][day].add(course.id)
+                    group_day_period_course[session.student_group][day][slot.period] = course.id
+                    if session.is_lab:
+                        group_day_lab_count[session.student_group][day] += 1
+                    
                     placed = True
                     break  # OPTIMIZATION: Early exit from faculty loop
 
@@ -408,9 +642,21 @@ class TimetableGenerator:
                     break  # OPTIMIZATION: Early exit from slot loop
 
             if not placed:
-                warnings.append(f"⚠️ Could not place session for course {course.code} (group {session.student_group})")
+                # Provide more detailed warning about why placement failed
+                reason = "unknown reason"
+                if session.is_lab and group_day_lab_count[session.student_group].get(day, 0) >= self.config.get('max_labs_per_day', 3):
+                    reason = "max labs per day limit reached"
+                elif course.id in group_day_courses[session.student_group].get(day, set()):
+                    reason = "same course already scheduled today (avoiding repetition)"
+                warnings.append(f"⚠️ Could not place session for course {course.code} (group {session.student_group}) - {reason}")
 
         greedy_time = time.time() - greedy_start
+        
+        # Validate constraints after generation
+        constraint_violations = self._validate_schedule_constraints(assignments, context)
+        if constraint_violations:
+            for violation in constraint_violations:
+                warnings.append(f"⚠️ Constraint violation: {violation}")
         
         if not assignments:
             return {
@@ -427,6 +673,52 @@ class TimetableGenerator:
             "greedy_time": greedy_time,
             "placement_rate": len(assignments) / len(sessions) if sessions else 0
         }
+
+    def _validate_schedule_constraints(self, assignments, context):
+        """Validate that the generated schedule satisfies all constraints"""
+        violations = []
+        slot_by_id = context["slot_by_id"]
+        max_labs_per_day = self.config.get('max_labs_per_day', 3)
+        
+        # Group assignments by student group and day
+        group_day_schedule = defaultdict(lambda: defaultdict(list))
+        for assignment in assignments:
+            slot = slot_by_id.get(assignment["slot_id"])
+            if slot:
+                group_day_schedule[assignment["group"]][slot.day].append({
+                    "period": slot.period,
+                    "course_id": assignment["course_id"],
+                    "course_code": assignment["course_code"],
+                    "is_lab": assignment["is_lab"]
+                })
+        
+        # Check constraints for each group and day
+        for group, days in group_day_schedule.items():
+            for day, schedule in days.items():
+                # Sort by period
+                schedule.sort(key=lambda x: x["period"])
+                
+                # Check 1: No consecutive same lectures
+                for i in range(len(schedule) - 1):
+                    if schedule[i]["course_id"] == schedule[i+1]["course_id"] and schedule[i]["period"] + 1 == schedule[i+1]["period"]:
+                        violations.append(f"{group} on {day}: Consecutive {schedule[i]['course_code']} lectures (periods {schedule[i]['period']}-{schedule[i+1]['period']})")
+                
+                # Check 2: Count labs per day
+                lab_count = sum(1 for item in schedule if item["is_lab"])
+                if lab_count > max_labs_per_day:
+                    violations.append(f"{group} on {day}: {lab_count} labs scheduled (max: {max_labs_per_day})")
+                
+                # Check 3: Same course scheduled multiple times in a day (for labs)
+                course_counts = defaultdict(int)
+                for item in schedule:
+                    if item["is_lab"]:
+                        course_counts[item["course_code"]] += 1
+                
+                for course_code, count in course_counts.items():
+                    if count > 1:
+                        violations.append(f"{group} on {day}: {course_code} lab scheduled {count} times")
+        
+        return violations
 
     # --------------------------------------------------------------------- #
     # Context Preparation

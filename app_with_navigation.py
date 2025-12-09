@@ -1297,6 +1297,40 @@ def delete_subject_from_branch(branch_code, subject_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/subject/<int:subject_id>/update', methods=['POST'])
+@admin_required
+def update_subject(subject_id):
+    """Update a subject's details"""
+    try:
+        subject = Course.query.get(subject_id)
+        if not subject:
+            return jsonify({'success': False, 'error': 'Subject not found'}), 404
+        
+        data = request.json
+        
+        # Update subject fields
+        if 'name' in data:
+            subject.name = data['name']
+        if 'code' in data:
+            subject.code = data['code']
+        if 'subject_type' in data:
+            subject.subject_type = data['subject_type']
+        if 'type' in data:
+            subject.course_type = data['type']
+        if 'credits' in data:
+            subject.credits = int(data['credits'])
+        if 'hours_per_week' in data:
+            subject.hours_per_week = int(data['hours_per_week'])
+        
+        subject.save()
+        invalidate_cache('courses')
+        
+        return jsonify({'success': True, 'message': 'Subject updated successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/branches/<branch_code>/subjects/import', methods=['POST'])
 @admin_required
 def import_subjects_to_branch(branch_code):
@@ -1452,6 +1486,39 @@ def add_faculty():
     if generated_password:
         response['generated_password'] = generated_password
     return jsonify(response)
+
+@app.route('/api/faculty/<int:faculty_id>/update', methods=['POST'])
+@admin_required
+def update_faculty(faculty_id):
+    """Update faculty details"""
+    try:
+        faculty = Faculty.query.get(faculty_id)
+        if not faculty:
+            return jsonify({'success': False, 'error': 'Faculty not found'}), 404
+        
+        data = request.json
+        
+        if 'name' in data:
+            faculty.name = data['name']
+        if 'email' in data:
+            faculty.email = data['email']
+        if 'username' in data:
+            faculty.username = data['username']
+        if 'expertise' in data:
+            faculty.expertise = data['expertise']
+        if 'min_hours_per_week' in data:
+            faculty.min_hours_per_week = int(data['min_hours_per_week'])
+        if 'max_hours_per_week' in data:
+            faculty.max_hours_per_week = int(data['max_hours_per_week'])
+        
+        faculty.save()
+        invalidate_cache('faculty')
+        
+        return jsonify({'success': True, 'message': 'Faculty updated successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/faculty/<int:faculty_id>/delete', methods=['POST'])
 @admin_required
@@ -1799,6 +1866,31 @@ def add_student():
     db.session.commit()
     response = {'success': True, 'id': student.id}
     return jsonify(response)
+
+@app.route('/api/student/<int:student_id>/update', methods=['POST'])
+@admin_required
+def update_student(student_id):
+    """Update student details"""
+    try:
+        student = Student.query.get(student_id)
+        if not student:
+            return jsonify({'success': False, 'error': 'Student not found'}), 404
+        
+        data = request.json
+        
+        if 'student_id' in data:
+            student.student_id = data['student_id']
+        if 'name' in data:
+            student.name = data['name']
+        
+        student.save()
+        invalidate_cache('students')
+        
+        return jsonify({'success': True, 'message': 'Student updated successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/students/<int:student_id>/delete', methods=['POST'])
 @admin_required
@@ -2171,6 +2263,33 @@ def add_student_group():
         db.session.rollback()
         return jsonify({'success': False, 'error': f'A class named "{name}" already exists.'}), 400
     return jsonify({'success': True, 'id': group.id})
+
+@app.route('/api/student-group/<int:group_id>/update', methods=['POST'])
+@admin_required
+def update_student_group(group_id):
+    """Update student group details"""
+    try:
+        group = StudentGroup.query.get(group_id)
+        if not group:
+            return jsonify({'success': False, 'error': 'Student group not found'}), 404
+        
+        data = request.json
+        
+        if 'name' in data:
+            group.name = data['name']
+        if 'description' in data:
+            group.description = data['description']
+        if 'total_students' in data:
+            group.total_students = int(data['total_students'])
+        
+        group.save()
+        invalidate_cache('student_groups')
+        
+        return jsonify({'success': True, 'message': 'Student group updated successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/student-groups/<int:group_id>/delete', methods=['POST'])
 @admin_required
