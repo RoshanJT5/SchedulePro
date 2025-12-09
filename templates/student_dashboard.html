@@ -206,8 +206,6 @@
     });
 
     async function loadEnrolledCoursesDetails() {
-        if (!selectedCourses || selectedCourses.length === 0) return;
-        
         if (!studentData.program || !studentData.branch || !studentData.semester) return;
 
         try {
@@ -215,6 +213,12 @@
             const data = await response.json();
             
             if (data.success) {
+                // Auto-add mandatory courses for semester 1 and 2
+                if (studentData.semester <= 2 && data.mandatory_courses) {
+                    selectedCourses = [...new Set([...selectedCourses, ...data.mandatory_courses])];
+                    studentData.enrolled_courses = selectedCourses;
+                }
+                
                 enrolledCoursesDetails = data.courses.filter(c => selectedCourses.includes(c.code));
                 renderEnrolledCourses();
             }
@@ -417,6 +421,16 @@
             const data = await response.json();
             
             availableCourses = data.courses || [];
+            
+            // Auto-add mandatory courses for semester 1 and 2
+            if (studentData.semester <= 2 && data.mandatory_courses) {
+                data.mandatory_courses.forEach(code => {
+                    if (!selectedCourses.includes(code)) {
+                        selectedCourses.push(code);
+                    }
+                });
+            }
+            
             renderCourses();
             
             document.getElementById('coursesLoading').style.display = 'none';
@@ -433,6 +447,17 @@
         if (availableCourses.length === 0) {
             container.innerHTML = '<div class="alert alert-warning">No courses available for this semester. Please contact admin.</div>';
             return;
+        }
+
+        // Add info message for semester 1 and 2
+        let infoMessage = '';
+        if (studentData.semester <= 2) {
+            infoMessage = `
+                <div class="alert alert-info" role="alert">
+                    <i class="bi bi-info-circle"></i> <strong>Note:</strong> All Major and Minor subjects are automatically enrolled for Semester ${studentData.semester}. 
+                    You can select additional subjects (MD, VA, SE, AE) if available.
+                </div>
+            `;
         }
 
         // Group courses by subject_type
@@ -455,7 +480,7 @@
             'other': { label: 'Other Courses', color: 'dark' }
         };
 
-        let html = '';
+        let html = infoMessage;
         Object.keys(groupedCourses).forEach(type => {
             const typeInfo = typeLabels[type] || typeLabels['other'];
             html += `
@@ -468,6 +493,10 @@
             
             groupedCourses[type].forEach(course => {
                 const isSelected = selectedCourses.includes(course.code);
+                const isMandatory = course.is_mandatory || false;
+                const isDisabled = isMandatory ? 'disabled' : '';
+                const mandatoryBadge = isMandatory ? '<span class="badge bg-success ms-1">Mandatory</span>' : '';
+                
                 html += `
                     <div class="col-md-6 mb-3">
                         <div class="card ${isSelected ? 'border-success' : ''}">
@@ -477,9 +506,11 @@
                                            id="course_${course.code}" 
                                            value="${course.code}"
                                            ${isSelected ? 'checked' : ''}
+                                           ${isDisabled}
                                            onchange="toggleCourse('${course.code}')">
                                     <label class="form-check-label" for="course_${course.code}">
                                         <strong>${course.code}</strong> - ${course.name}
+                                        ${mandatoryBadge}
                                         <br>
                                         <small class="text-muted">
                                             <span class="badge bg-info">${course.course_type}</span>

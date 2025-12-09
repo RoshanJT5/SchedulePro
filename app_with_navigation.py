@@ -2039,10 +2039,20 @@ def get_student_courses():
             'credits': getattr(c, 'credits', 0),
             'course_type': getattr(c, 'course_type', 'theory'),
             'subject_type': getattr(c, 'subject_type', None),
-            'hours_per_week': getattr(c, 'hours_per_week', 0)
+            'hours_per_week': getattr(c, 'hours_per_week', 0),
+            'is_mandatory': (semester in [1, 2] and getattr(c, 'subject_type', None) in ['major', 'minor'])
         } for c in courses]
         
-        return jsonify({'success': True, 'courses': courses_data})
+        # For semester 1 and 2, get mandatory major/minor course codes
+        mandatory_courses = []
+        if semester in [1, 2]:
+            mandatory_courses = [c['code'] for c in courses_data if c['is_mandatory']]
+        
+        return jsonify({
+            'success': True, 
+            'courses': courses_data,
+            'mandatory_courses': mandatory_courses
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
@@ -2061,6 +2071,20 @@ def enroll_student_courses():
         
         data = request.json
         courses = data.get('courses', [])
+        
+        # For semester 1 and 2, automatically add major and minor courses
+        if student.semester in [1, 2] and student.program and student.branch:
+            all_courses = Course.query.filter_by(
+                program=student.program,
+                branch=student.branch,
+                semester=student.semester
+            ).all()
+            
+            # Filter for major and minor courses
+            mandatory_codes = [c.code for c in all_courses if getattr(c, 'subject_type', None) in ['major', 'minor']]
+            
+            # Merge mandatory courses with selected courses (remove duplicates)
+            courses = list(set(mandatory_codes + courses))
         
         student.enrolled_courses = courses
         student.save()
