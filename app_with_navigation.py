@@ -821,6 +821,11 @@ def health_check():
 @login_required
 def index():
     user = get_current_user()
+    
+    # Redirect students to their dashboard
+    if user and user.role == 'student':
+        return redirect('/student/dashboard')
+    
     stats = {
         'courses': Course.query.count(),
         'faculty': Faculty.query.count(),
@@ -1756,41 +1761,39 @@ def add_student():
 
     if not name or not student_id:
         return jsonify({'success': False, 'error': 'name and student_id are required'}), 400
+    
+    if not username or not password:
+        return jsonify({'success': False, 'error': 'username and password are required'}), 400
 
-    # Create/Link student user account if username provided
+    # Create/Link student user account
     user = None
-    if username:
-        existing_user = User.query.filter_by(username=username).first()
-        if existing_user:
-            if existing_user.role not in ('student', 'teacher', 'admin'):
-                # Unknown role, but still allow setting to student
-                existing_user.role = 'student'
-            elif existing_user.role != 'student':
-                return jsonify({'success': False, 'error': 'Username already used by another account'}), 400
-            existing_user.name = name
-            if password:
-                existing_user.set_password(password)
-            user = existing_user
-        else:
-            # Create new student user
-            email = f"{username}@student.local"
-            # Ensure email uniqueness
-            if User.query.filter_by(email=email).first():
-                email = f"{username}+{secrets.token_hex(3)}@student.local"
-            user = User(username=username, email=email, role='student', name=name)
-            if password:
-                user.set_password(password)
-            else:
-                user.set_password(secrets.token_urlsafe(8))
-            db.session.add(user)
-            db.session.flush()
+    existing_user = User.query.filter_by(username=username).first()
+    if existing_user:
+        if existing_user.role not in ('student', 'teacher', 'admin'):
+            # Unknown role, but still allow setting to student
+            existing_user.role = 'student'
+        elif existing_user.role != 'student':
+            return jsonify({'success': False, 'error': 'Username already used by another account'}), 400
+        existing_user.name = name
+        existing_user.set_password(password)
+        user = existing_user
+    else:
+        # Create new student user
+        email = f"{username}@student.local"
+        # Ensure email uniqueness
+        if User.query.filter_by(email=email).first():
+            email = f"{username}+{secrets.token_hex(3)}@student.local"
+        user = User(username=username, email=email, role='student', name=name)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.flush()
 
     student = Student(
         name=name,
         student_id=student_id,
         enrolled_courses=','.join(courses),
-        username=username or None,
-        user_id=(user.id if user else None)
+        username=username,
+        user_id=user.id
     )
     db.session.add(student)
     db.session.commit()
@@ -1927,6 +1930,147 @@ def delete_all_students():
         return jsonify({'success': True, 'deleted': deleted_count})
     except Exception as e:
         db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+# Student Course Selection API
+@app.route('/student/dashboard')
+@login_required
+def student_dashboard():
+    """Student dashboard for course selection"""
+    user = get_current_user()
+    
+    # Check if user exists
+    if not user:
+        return redirect('/login')
+    
+    # Only students can access this page
+    if user.role != 'student':
+        return redirect('/')
+    
+    # Find the student record
+    student = Student.query.filter_by(user_id=user.id).first()
+    if not student:
+        # Create a student record if it doesn't exist
+        student = Student(
+            student_id=user.username,
+            name=user.username,
+            user_id=user.id
+        )
+        student.save()
+    
+    import json
+    student_json = json.dumps(student.to_dict(), default=str)
+    
+    return render_template('student_dashboard.html', student=student, student_json=student_json, user=user)
+
+@app.route('/api/branches/programs')
+@login_required
+def get_programs():
+    """Get all unique programs"""
+    try:
+        branches = Branch.query.all()
+        programs = list(set(b.program for b in branches if b.program))
+        programs.sort()
+        return jsonify({'success': True, 'programs': programs})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/branches/by-program/<program>')
+@login_required
+def get_branches_by_program(program):
+    """Get all branches for a specific program"""
+    try:
+        branches = Branch.query.filter_by(program=program).all()
+        branches_data = [{
+            'code': b.code,
+            'name': b.name,
+            'program': b.program,
+            'total_semesters': getattr(b, 'total_semesters', 8)
+        } for b in branches]
+        return jsonify({'success': True, 'branches': branches_data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/student/update-profile', methods=['POST'])
+@login_required
+def update_student_profile():
+    """Update student's program, branch, and semester"""
+    try:
+        user = get_current_user()
+        if user.role != 'student':
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+        
+        student = Student.query.filter_by(user_id=user.id).first()
+        if not student:
+            return jsonify({'success': False, 'error': 'Student record not found'}), 404
+        
+        data = request.json
+        student.program = data.get('program')
+        student.branch = data.get('branch')
+        student.semester = int(data.get('semester', 1))
+        student.save()
+        
+        return jsonify({'success': True, 'message': 'Profile updated successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/student/courses')
+@login_required
+def get_student_courses():
+    """Get available courses for student's program, branch, and semester"""
+    try:
+        program = request.args.get('program')
+        branch = request.args.get('branch')
+        semester = int(request.args.get('semester', 1))
+        
+        if not program or not branch:
+            return jsonify({'success': False, 'error': 'Program and branch are required'}), 400
+        
+        courses = Course.query.filter_by(
+            program=program,
+            branch=branch,
+            semester=semester
+        ).all()
+        
+        courses_data = [{
+            'id': str(c.id),
+            'code': c.code,
+            'name': c.name,
+            'credits': getattr(c, 'credits', 0),
+            'course_type': getattr(c, 'course_type', 'theory'),
+            'subject_type': getattr(c, 'subject_type', None),
+            'hours_per_week': getattr(c, 'hours_per_week', 0)
+        } for c in courses]
+        
+        return jsonify({'success': True, 'courses': courses_data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/student/enroll-courses', methods=['POST'])
+@login_required
+def enroll_student_courses():
+    """Save student's enrolled courses"""
+    try:
+        user = get_current_user()
+        if user.role != 'student':
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+        
+        student = Student.query.filter_by(user_id=user.id).first()
+        if not student:
+            return jsonify({'success': False, 'error': 'Student record not found'}), 404
+        
+        data = request.json
+        courses = data.get('courses', [])
+        
+        student.enrolled_courses = courses
+        student.save()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully enrolled in {len(courses)} courses',
+            'enrolled_courses': courses
+        })
+    except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
 # Student Group Management
@@ -2120,12 +2264,6 @@ def delete_all_student_groups():
 def timetable():
     import time as time_module
     view_start = time_module.time()
-    
-    # Disable caching - always show fresh data after generation
-    response = make_response()
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
     
     user = get_current_user()
     entries_query = TimetableEntry.query
@@ -2336,7 +2474,7 @@ def timetable():
             semesters_set.add(sem)
     semesters = sorted(list(semesters_set))
 
-    return render_template('timetable.html', 
+    response = make_response(render_template('timetable.html', 
                          timetable_data=timetable_data,
                          days=days,
                          periods=periods,
@@ -2350,7 +2488,14 @@ def timetable():
                          rooms=rooms_list,
                          programs=programs,
                          branches=branches,
-                         semesters=semesters)
+                         semesters=semesters))
+    
+    # Disable caching - always show fresh data after generation
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    return response
 
 
 @app.route('/timetable/entries')

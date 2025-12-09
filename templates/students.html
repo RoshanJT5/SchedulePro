@@ -54,9 +54,9 @@
                             <td><strong>{{ student.student_id }}</strong></td>
                             <td>{{ student.name }}</td>
                             <td>
-                                {% if student.enrolled_courses %}
-                                {% for code in student.enrolled_courses.split(',') %}
-                                <span class="badge bg-primary">{{ code.strip() }}</span>
+                                {% if student.enrolled_courses and student.enrolled_courses|length > 0 %}
+                                {% for code in student.enrolled_courses %}
+                                <span class="badge bg-primary">{{ code }}</span>
                                 {% endfor %}
                                 {% else %}
                                 <span class="text-muted">No courses enrolled</span>
@@ -105,31 +105,16 @@
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Username (login)</label>
-                            <input type="text" class="form-control" name="username" placeholder="optional">
+                            <label class="form-label">Username (login) *</label>
+                            <input type="text" class="form-control" name="username" required>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Password</label>
-                            <input type="password" class="form-control" name="password" placeholder="optional">
-                            <small class="text-muted">If left blank, a password will be auto-generated.</small>
+                            <label class="form-label">Password *</label>
+                            <input type="password" class="form-control" name="password" required>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Enrolled Courses</label>
-                        <small class="text-muted d-block mb-2">Select or enter course codes (comma-separated)</small>
-                        <div class="mb-2">
-                            <input type="text" class="form-control" name="courses_text"
-                                placeholder="e.g., CS101, CS102, MATH201">
-                        </div>
-                        <div>
-                            <small>Available courses:</small>
-                            <div class="mt-1">
-                                {% for course in courses %}
-                                <span class="badge bg-light text-dark me-1 mb-1" style="cursor: pointer;"
-                                    onclick="addCourse('{{ course.code }}')">{{ course.code }}</span>
-                                {% endfor %}
-                            </div>
-                        </div>
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle"></i> Students will select their courses after logging in based on their program, branch, and semester.
                     </div>
                 </form>
             </div>
@@ -189,16 +174,12 @@
         const formData = new FormData(form);
         const data = Object.fromEntries(formData);
 
-        // Combine courses from list and text input
-        const coursesText = data.courses_text || '';
-        const courses = courseList.length > 0 ? courseList : (coursesText ? coursesText.split(',').map(c => c.trim()) : []);
-
         const payload = {
             student_id: data.student_id,
             name: data.name,
             username: (data.username || '').trim(),
             password: (data.password || '').trim(),
-            courses: courses
+            courses: [] // Students will select courses themselves after login
         };
 
         fetch('/students/add', {

@@ -351,6 +351,22 @@ class Room(BaseModel):
 
 
 class Student(BaseModel):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Ensure default values for student selection context
+        if not hasattr(self, 'program'): self.program = None
+        if not hasattr(self, 'branch'): self.branch = None
+        if not hasattr(self, 'semester'): self.semester = None
+        if not hasattr(self, 'enrolled_courses'): self.enrolled_courses = []
+
+    def to_dict(self):
+        d = super().to_dict()
+        d['program'] = getattr(self, 'program', None)
+        d['branch'] = getattr(self, 'branch', None)
+        d['semester'] = getattr(self, 'semester', None)
+        d['enrolled_courses'] = getattr(self, 'enrolled_courses', [])
+        return d
+
     def __repr__(self):
         return f'<Student {getattr(self, "student_id", None)}>'
 
